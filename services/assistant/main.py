@@ -104,19 +104,25 @@ def run_assistant(args):
 
     if provider == 'openrouter':
         api_key_env = config['llm']['openrouter']['api_key_env']
-        if not os.getenv(api_key_env):
+        # Skip check if API key is directly in config (starts with 'sk-')
+        if not api_key_env.startswith('sk-') and not os.getenv(api_key_env):
             print(f"\n❌ Error: {api_key_env} environment variable not set!")
             print(f"\nPlease set your OpenRouter API key:")
-            print(f"  export {api_key_env}='your-api-key-here'")
+            print(f"  Windows PowerShell: $env:{api_key_env}='your-api-key-here'")
+            print(f"  Linux/Mac: export {api_key_env}='your-api-key-here'")
+            print("\nOr put the key directly in config.yaml under api_key_env")
             print("\nGet your FREE API key from: https://openrouter.ai/keys")
             print("\nNote: OpenRouter offers free models for testing!\n")
             return
     else:
         api_key_env = config['llm']['openai']['api_key_env']
-        if not os.getenv(api_key_env):
+        # Skip check if API key is directly in config (starts with 'sk-')
+        if not api_key_env.startswith('sk-') and not os.getenv(api_key_env):
             print(f"\n❌ Error: {api_key_env} environment variable not set!")
             print(f"\nPlease set your OpenAI API key:")
-            print(f"  export {api_key_env}='your-api-key-here'")
+            print(f"  Windows PowerShell: $env:{api_key_env}='your-api-key-here'")
+            print(f"  Linux/Mac: export {api_key_env}='your-api-key-here'")
+            print("\nOr put the key directly in config.yaml under api_key_env")
             print("\nGet your API key from: https://platform.openai.com/api-keys")
             print("\nNote: This requires an OpenAI account with API credits.")
             print("\nAlternatively, set provider to 'openrouter' in config.yaml for free models.\n")
