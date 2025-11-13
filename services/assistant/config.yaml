@@ -1,0 +1,25 @@
+# Assistant Configuration
+
+llm:
+  # Choose provider: "openai" or "openrouter"
+  provider: "openrouter"  # Default to free option
+
+  # OpenAI Configuration (paid service)
+  openai:
+    model: "gpt-4o-mini"  # cost-effective model
+    api_key_env: "OPENAI_API_KEY"
+
+  # OpenRouter Configuration (free models available)
+  openrouter:
+    model: "meta-llama/llama-3.1-8b-instruct:free"  # free model
+    api_key_env: "OPENROUTER_API_KEY"
+    base_url: "https://openrouter.ai/api/v1"
+
+  # Shared LLM parameters
+  temperature: 0.3
+  max_tokens: 1000
+
+# Context retrieval
+context:
+  max_visas: 5
+  max_tokens_per_visa: 500
