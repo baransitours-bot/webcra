@@ -20,6 +20,9 @@ langchain>=0.1.0
 # Semantic search (FREE - runs locally, no API costs)
 sentence-transformers>=2.2.0
 
+# Web UI (optional)
+streamlit>=1.28.0
+
 # API (optional)
 fastapi>=0.104.0
 uvicorn>=0.24.0
