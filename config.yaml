@@ -1,42 +1,58 @@
-# Immigration Crawler Configuration
+# Global Configuration
 
-# Starting URLs for crawling
-seed_urls:
-  - url: "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing"
-    country: "Australia"
-    language: "en"
-  - url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada.html"
-    country: "Canada"
-    language: "en"
-  - url: "https://www.gov.uk/browse/visas-immigration"
-    country: "United Kingdom"
-    language: "en"
+project:
+  name: "Immigration Platform"
+  version: "0.1.0"
 
-# Crawling parameters
-max_depth: 3
-max_pages: 50
-delay_between_requests: 1  # seconds
+# Target countries for MVP
+countries:
+  australia:
+    name: "Australia"
+    code: "AU"
+    base_url: "https://immi.homeaffairs.gov.au"
+    seed_urls:
+      - "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing"
 
-# Domain filtering
-allowed_domains:
-  - "immi.homeaffairs.gov.au"
-  - "canada.ca"
-  - "gov.uk"
+  canada:
+    name: "Canada"
+    code: "CA"
+    base_url: "https://www.canada.ca"
+    seed_urls:
+      - "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada.html"
 
-# Keywords to filter relevant pages
+  uk:
+    name: "United Kingdom"
+    code: "UK"
+    base_url: "https://www.gov.uk"
+    seed_urls:
+      - "https://www.gov.uk/browse/visas-immigration"
+
+  germany:
+    name: "Germany"
+    code: "DE"
+    base_url: "https://www.germany.info"
+    seed_urls:
+      - "https://www.germany.info/us-en/service/visa"
+
+  uae:
+    name: "United Arab Emirates"
+    code: "AE"
+    base_url: "https://u.ae"
+    seed_urls:
+      - "https://u.ae/en/information-and-services/visa-and-emirates-id"
+
+# Data storage
+storage:
+  raw_data_path: "data/raw"
+  processed_data_path: "data/processed"
+  database_path: "data/database"
+
+# Common keywords for filtering
 keywords:
   - "visa"
   - "immigration"
   - "permit"
-  - "residency"
-  - "citizenship"
+  - "residence"
   - "eligibility"
   - "requirements"
   - "application"
-
-# Output settings
-output_dir: "data"
-output_file: "crawled_pages.json"
-
-# User agent
-user_agent: "Mozilla/5.0 (compatible; ImmigrationCrawler/1.0; Educational Purpose)"
