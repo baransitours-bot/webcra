@@ -1,0 +1,88 @@
+# Classifier Configuration
+
+# Visa categories
+visa_categories:
+  - "work"
+  - "study"
+  - "family"
+  - "investment"
+  - "tourism"
+  - "retirement"
+
+# Keywords for visa type identification
+visa_type_keywords:
+  work:
+    - "skilled"
+    - "worker"
+    - "employment"
+    - "occupation"
+    - "professional"
+    - "temporary work"
+    - "sponsored"
+  study:
+    - "student"
+    - "education"
+    - "university"
+    - "study"
+    - "course"
+    - "training"
+  family:
+    - "spouse"
+    - "partner"
+    - "family"
+    - "dependent"
+    - "parent"
+    - "child"
+  investment:
+    - "investor"
+    - "business"
+    - "entrepreneur"
+    - "startup"
+  tourism:
+    - "tourist"
+    - "visitor"
+    - "holiday"
+    - "travel"
+  retirement:
+    - "retirement"
+    - "retiree"
+    - "pension"
+
+# Patterns for extracting requirements
+patterns:
+  age:
+    - "age (?:between |from )?(\\d+)(?:\\s*(?:to|-|and)\\s*(\\d+))?"
+    - "(?:under|below) (\\d+)"
+    - "(?:over|above|at least) (\\d+)"
+    - "(\\d+)\\s*(?:to|-|and)\\s*(\\d+)\\s*years? old"
+
+  education:
+    - "bachelor'?s? degree"
+    - "master'?s? degree"
+    - "phd|doctorate"
+    - "diploma"
+    - "secondary|high school"
+    - "tertiary qualification"
+    - "degree qualification"
+
+  experience:
+    - "(\\d+)\\+?\\s*(?:years?|yrs?)\\s*(?:of)?\\s*(?:work |professional |relevant )?experience"
+    - "(?:minimum|at least)\\s*(\\d+)\\s*(?:years?|yrs?)"
+    - "experience\\s*:?\\s*(\\d+)\\s*(?:years?|yrs?)"
+
+  fees:
+    - "(?:fee|cost|charge|price)\\s*:?\\s*(?:AUD|CAD|GBP|EUR|USD)?\\s*\\$?([\\d,]+)"
+    - "\\$([\\d,]+)\\s*(?:application fee|visa fee|processing fee)"
+    - "([\\d,]+)\\s*(?:AUD|CAD|GBP|EUR|USD)"
+
+  processing_time:
+    - "(\\d+)\\s*(?:to|-|or)\\s*(\\d+)\\s*(?:months?|weeks?|days?)"
+    - "(?:within|up to)\\s*(\\d+)\\s*(?:months?|weeks?|days?)"
+    - "processing time\\s*:?\\s*(\\d+)(?:\\s*(?:to|-|or)\\s*(\\d+))?\\s*(?:months?|weeks?|days?)"
+
+  language:
+    - "(?:IELTS|ielts)\\s*(?:score)?\\s*(?:of)?\\s*([\\d.]+)"
+    - "(?:TOEFL|toefl)\\s*(?:score)?\\s*(?:of)?\\s*([\\d.]+)"
+    - "(?:PTE|pte)\\s*(?:score)?\\s*(?:of)?\\s*([\\d.]+)"
+    - "english proficiency"
+    - "language requirement"
