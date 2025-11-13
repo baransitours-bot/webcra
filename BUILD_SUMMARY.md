@@ -52,12 +52,31 @@
 - Language requirement detection (IELTS, TOEFL, PTE)
 - Multi-page visa grouping and merging
 
+### Stage 4: Matcher Service
+**Commit:** `e2106fc` - Complete Stage 4: Matcher Service
+
+**Delivered:**
+- Matcher configuration (services/matcher/config.yaml)
+- Eligibility scorer (services/matcher/scorer.py)
+- Visa ranker (services/matcher/ranker.py)
+- Full matcher entry point with interactive mode (services/matcher/main.py)
+- Comprehensive test suite (tests/test_matcher.py)
+
+**Features:**
+- Eligibility scoring with weighted criteria
+- Age, education, and experience matching
+- Gap identification (what user is missing)
+- Visa ranking by score
+- Country filtering
+- Interactive profile builder
+- Top 10 matches display with full details
+
 ## 📊 Statistics
 
-- **Total Commits:** 4 (including initial)
-- **Total Files:** 30+ Python files, configs, and docs
-- **Services Implemented:** 2 of 4 (Crawler, Classifier)
-- **Test Coverage:** Comprehensive test suites for both services
+- **Total Commits:** 8 (including initial + bugfixes)
+- **Total Files:** 35+ Python files, configs, and docs
+- **Services Implemented:** 3 of 4 (Crawler, Classifier, Matcher)
+- **Test Coverage:** Comprehensive test suites for all services
 - **All Tests:** ✅ Passing
 
 ## 🗂️ Project Structure
@@ -78,7 +97,11 @@ immigration-platform/
 │   │   ├── extractor.py
 │   │   ├── structurer.py
 │   │   └── main.py
-│   ├── matcher/                 # ⏳ TODO - Stage 4
+│   ├── matcher/                 # ✅ COMPLETE - Stage 4
+│   │   ├── config.yaml
+│   │   ├── scorer.py
+│   │   ├── ranker.py
+│   │   └── main.py
 │   └── assistant/               # ⏳ TODO - Stage 5
 │
 ├── shared/                      # ✅ COMPLETE
@@ -86,9 +109,10 @@ immigration-platform/
 │   ├── database.py
 │   └── logger.py
 │
-├── tests/                       # ✅ Tests for Stages 2 & 3
+├── tests/                       # ✅ Tests for Stages 2, 3 & 4
 │   ├── test_crawler.py
-│   └── test_classifier.py
+│   ├── test_classifier.py
+│   └── test_matcher.py
 │
 └── docs/                        # ✅ Documentation
     ├── STAGE_2_CRAWLER.md
@@ -109,10 +133,20 @@ python main.py classify --country TestCountry
 python main.py classify --all
 ```
 
+### Matcher
+```bash
+# Interactive mode
+python main.py match --interactive
+
+# With profile file
+python main.py match --profile user_profile.json
+```
+
 ### Tests
 ```bash
 python tests/test_crawler.py
 python tests/test_classifier.py
+python tests/test_matcher.py
 ```
 
 ## 📈 Progress
@@ -120,13 +154,13 @@ python tests/test_classifier.py
 - ✅ Stage 1: Project Foundation (Week 1)
 - ✅ Stage 2: Crawler Service (Week 2)
 - ✅ Stage 3: Classifier Service (Week 3-4)
-- ⏳ Stage 4: Matcher Service (Next)
-- ⏳ Stage 5: Assistant Service
+- ✅ Stage 4: Matcher Service (Week 5)
+- ⏳ Stage 5: Assistant Service (Next)
 - ⏳ Stage 6: Testing & Validation
 - ⏳ Stage 7: Documentation & Deployment
 
 ## 🔗 Branch Info
 
 **Branch:** `claude/immigration-platform-build-plan-011CV5fS4Mj5BtYhoTJd5BP5`
-**Latest Commit:** `763a885` - Complete Stage 3: Classifier Service
-**Status:** Ready for Stage 4 (Matcher Service)
+**Latest Commit:** `e2106fc` - Complete Stage 4: Matcher Service
+**Status:** Ready for Stage 5 (Assistant Service)
