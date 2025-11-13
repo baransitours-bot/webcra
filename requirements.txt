@@ -1,6 +1,25 @@
+# Core dependencies
 scrapy>=2.11.0
-requests>=2.31.0
 beautifulsoup4>=4.12.0
+requests>=2.31.0
 lxml>=4.9.0
-PyYAML>=6.0.1
+
+# Data processing
+pyyaml>=6.0
 python-dateutil>=2.8.2
+pandas>=2.0.0
+
+# Database
+sqlalchemy>=2.0.0
+pymongo>=4.6.0
+
+# LLM integration
+openai>=1.0.0
+langchain>=0.1.0
+
+# API (optional)
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Utilities
+python-dotenv>=1.0.0
