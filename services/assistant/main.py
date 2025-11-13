@@ -6,7 +6,13 @@ import yaml
 import json
 import os
 from services.assistant.llm_client import LLMClient
-from services.assistant.retriever import ContextRetriever
+
+# Try to use enhanced retriever, fallback to original if not available
+try:
+    from services.assistant.enhanced_retriever import EnhancedRetriever as ContextRetriever
+except ImportError:
+    from services.assistant.retriever import ContextRetriever
+
 from services.assistant.prompts import (
     SYSTEM_PROMPT,
     ELIGIBILITY_PROMPT_TEMPLATE,
