@@ -157,7 +157,15 @@ def test_assistant_without_api():
     # Test config
     assert 'llm' in config, "Config should have llm section"
     assert 'context' in config, "Config should have context section"
-    assert config['llm']['model'], "Should specify model"
+    assert 'provider' in config['llm'], "Should specify provider"
+
+    # Check that the provider has a model configured
+    provider = config['llm']['provider']
+    if provider == 'openrouter':
+        assert config['llm']['openrouter']['model'], "Should specify OpenRouter model"
+    else:
+        assert config['llm']['openai']['model'], "Should specify OpenAI model"
+
     print("✅ Configuration is valid")
 
     # Test retriever initialization
@@ -184,22 +192,29 @@ def test_llm_client_initialization():
     with open('services/assistant/config.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
+    provider = config['llm'].get('provider', 'openai')
+
     # Test without API key
-    if not os.getenv('OPENAI_API_KEY'):
-        print("⚠️  OPENAI_API_KEY not set - testing error handling")
+    if provider == 'openrouter':
+        api_key_env = 'OPENROUTER_API_KEY'
+    else:
+        api_key_env = 'OPENAI_API_KEY'
+
+    if not os.getenv(api_key_env):
+        print(f"⚠️  {api_key_env} not set - testing error handling")
         try:
             from services.assistant.llm_client import LLMClient
             client = LLMClient(config)
             print("❌ Should have raised ValueError for missing API key")
         except ValueError as e:
             assert 'API key not found' in str(e), "Should show helpful error message"
-            print("✅ Properly handles missing API key")
+            print(f"✅ Properly handles missing {provider} API key")
     else:
-        print("ℹ️  OPENAI_API_KEY is set - skipping error test")
+        print(f"ℹ️  {api_key_env} is set - testing initialization")
         try:
             from services.assistant.llm_client import LLMClient
             client = LLMClient(config)
-            print("✅ LLM client initializes with API key")
+            print(f"✅ LLM client initializes with {provider}")
         except Exception as e:
             print(f"⚠️  LLM client initialization issue: {e}")
 
@@ -210,9 +225,14 @@ def display_usage_instructions():
     print("=" * 60)
 
     print("\n📋 To use the AI Assistant, you need:")
-    print("1. OpenAI API key (get from: https://platform.openai.com/api-keys)")
+    print("1. API key from OpenRouter (FREE) or OpenAI (paid)")
+    print("   - OpenRouter: https://openrouter.ai/keys (FREE models available)")
+    print("   - OpenAI: https://platform.openai.com/api-keys (requires credits)")
     print("2. Structured visa data (run: python main.py classify --all)")
-    print("3. Set environment variable: export OPENAI_API_KEY='your-key'")
+    print("3. Set environment variable:")
+    print("   - For OpenRouter: export OPENROUTER_API_KEY='your-key'")
+    print("   - For OpenAI: export OPENAI_API_KEY='your-key'")
+    print("4. Configure provider in services/assistant/config.yaml")
 
     print("\n💬 Single Query Mode:")
     print("  python main.py assist --query 'What visas are available in Canada?'")
@@ -224,7 +244,8 @@ def display_usage_instructions():
     print("  python main.py assist --query 'Am I eligible?' --profile user.json")
 
     print("\n📝 Note:")
-    print("  - The assistant uses gpt-4o-mini (cost-effective)")
+    print("  - Default: OpenRouter with meta-llama/llama-3.1-8b-instruct:free (FREE)")
+    print("  - Alternative: OpenAI with gpt-4o-mini (paid, cost-effective)")
     print("  - It retrieves relevant visa data automatically")
     print("  - Answers are based on your structured visa database")
     print("  - Citations include source URLs when available")

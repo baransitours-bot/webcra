@@ -95,18 +95,32 @@ def run_assistant(args):
     logger = setup_logger('assistant', 'assistant.log')
     logger.info("🤖 Starting AI Assistant Service...")
 
-    # Check if OpenAI API key is set
-    if not os.getenv('OPENAI_API_KEY'):
-        print("\n❌ Error: OPENAI_API_KEY environment variable not set!")
-        print("\nPlease set your OpenAI API key:")
-        print("  export OPENAI_API_KEY='your-api-key-here'")
-        print("\nGet your API key from: https://platform.openai.com/api-keys")
-        print("\nNote: This requires an OpenAI account with API credits.\n")
-        return
-
-    # Load config
+    # Load config first to check provider
     with open('services/assistant/config.yaml', 'r') as f:
         config = yaml.safe_load(f)
+
+    # Check if appropriate API key is set based on provider
+    provider = config['llm'].get('provider', 'openai')
+
+    if provider == 'openrouter':
+        api_key_env = config['llm']['openrouter']['api_key_env']
+        if not os.getenv(api_key_env):
+            print(f"\n❌ Error: {api_key_env} environment variable not set!")
+            print(f"\nPlease set your OpenRouter API key:")
+            print(f"  export {api_key_env}='your-api-key-here'")
+            print("\nGet your FREE API key from: https://openrouter.ai/keys")
+            print("\nNote: OpenRouter offers free models for testing!\n")
+            return
+    else:
+        api_key_env = config['llm']['openai']['api_key_env']
+        if not os.getenv(api_key_env):
+            print(f"\n❌ Error: {api_key_env} environment variable not set!")
+            print(f"\nPlease set your OpenAI API key:")
+            print(f"  export {api_key_env}='your-api-key-here'")
+            print("\nGet your API key from: https://platform.openai.com/api-keys")
+            print("\nNote: This requires an OpenAI account with API credits.")
+            print("\nAlternatively, set provider to 'openrouter' in config.yaml for free models.\n")
+            return
 
     # Parse arguments
     options = parse_arguments(args)
