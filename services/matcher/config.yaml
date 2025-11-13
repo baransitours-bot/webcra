@@ -1,0 +1,23 @@
+# Matcher Configuration
+
+# Scoring weights
+scoring:
+  age_match: 20
+  education_match: 30
+  experience_match: 25
+  language_match: 15
+  other: 10
+
+# Education level mapping (for comparison)
+education_levels:
+  phd: 5
+  masters: 4
+  bachelors: 3
+  diploma: 2
+  secondary: 1
+
+# Matching thresholds
+thresholds:
+  high_match: 80
+  medium_match: 60
+  low_match: 40
