@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Crawled Pages Viewer</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header>
+    <h1>Crawled Pages Viewer</h1>
+    <div class="controls">
+      <input id="search" placeholder="Search title, url, source, tags..." />
+      <select id="countryFilter"><option value="">All countries</option></select>
+      <select id="tagFilter"><option value="">All tags</option></select>
+    </div>
+  </header>
+
+  <main>
+    <aside id="listPane">
+      <ul id="list"></ul>
+    </aside>
+
+    <section id="detailPane">
+      <div id="meta">
+        <h2 id="detailTitle">Select an item</h2>
+        <div id="metaInfo"></div>
+        <div class="detail-actions">
+          <a id="openUrl" href="#" target="_blank">Open original URL</a>
+          <button id="showText">View text</button>
+          <button id="showHtml">View HTML</button>
+        </div>
+      </div>
+
+      <div id="contentText" class="contentArea"><pre id="textPre"></pre></div>
+      <div id="contentHtml" class="contentArea"><iframe id="htmlFrame" sandbox></iframe></div>
+    </section>
+  </main>
+
+  <footer>
+    <small>Data source: data/crawled_pages.json — served from current folder</small>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

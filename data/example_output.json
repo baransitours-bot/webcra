@@ -1,0 +1,68 @@
+[
+  {
+    "url": "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-independent-189",
+    "source": "Australia Immigration Portal",
+    "country": "Australia",
+    "language": "en",
+    "title": "Skilled Independent visa (subclass 189)",
+    "breadcrumbs": [
+      "Home",
+      "Visas",
+      "Getting a visa",
+      "Visa listing",
+      "Skilled Independent 189"
+    ],
+    "content_text": "The Skilled Independent visa (subclass 189) is a permanent residence visa for invited workers and New Zealand citizens with skills Australia needs. With this visa you can: stay in Australia indefinitely, work and study in Australia, enrol in Medicare, sponsor relatives for permanent residence, travel to and from Australia for 5 years, and if eligible, become an Australian citizen. You must be invited to apply for this visa. To be invited you need to submit an Expression of Interest through SkillSelect...",
+    "content_html": "<html>...</html>",
+    "depth": 2,
+    "linked_urls": [
+      "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-independent-189/how-to-apply",
+      "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-independent-189/eligibility",
+      "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-regional-887"
+    ],
+    "attachments": [
+      {
+        "type": "pdf",
+        "url": "https://immi.homeaffairs.gov.au/form-listing/forms/1221.pdf",
+        "title": "Form 1221 - Additional personal particulars information"
+      }
+    ],
+    "tags": [
+      "visa",
+      "skilled",
+      "eligibility",
+      "requirements",
+      "application"
+    ],
+    "timestamp": "2025-11-12T14:23:45Z"
+  },
+  {
+    "url": "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry.html",
+    "source": "Canada Immigration Portal",
+    "country": "Canada",
+    "language": "en",
+    "title": "Express Entry: How it works",
+    "breadcrumbs": [
+      "Canada.ca",
+      "Immigration",
+      "Immigrate to Canada",
+      "Express Entry"
+    ],
+    "content_text": "Express Entry is an application management system for skilled workers who want to immigrate to Canada permanently and live and work there. There are 3 immigration programs managed through Express Entry: Federal Skilled Worker Program, Federal Skilled Trades Program, and Canadian Experience Class. To apply, you need to create an online profile. If you meet the criteria, you'll be placed in a pool of candidates. We'll invite the highest-ranking candidates to apply for permanent residence...",
+    "content_html": "<html>...</html>",
+    "depth": 1,
+    "linked_urls": [
+      "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/eligibility.html",
+      "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/submit-profile.html"
+    ],
+    "attachments": [],
+    "tags": [
+      "immigration",
+      "visa",
+      "eligibility",
+      "application",
+      "residency"
+    ],
+    "timestamp": "2025-11-12T14:25:12Z"
+  }
+]

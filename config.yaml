@@ -1,0 +1,42 @@
+# Immigration Crawler Configuration
+
+# Starting URLs for crawling
+seed_urls:
+  - url: "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing"
+    country: "Australia"
+    language: "en"
+  - url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada.html"
+    country: "Canada"
+    language: "en"
+  - url: "https://www.gov.uk/browse/visas-immigration"
+    country: "United Kingdom"
+    language: "en"
+
+# Crawling parameters
+max_depth: 3
+max_pages: 50
+delay_between_requests: 1  # seconds
+
+# Domain filtering
+allowed_domains:
+  - "immi.homeaffairs.gov.au"
+  - "canada.ca"
+  - "gov.uk"
+
+# Keywords to filter relevant pages
+keywords:
+  - "visa"
+  - "immigration"
+  - "permit"
+  - "residency"
+  - "citizenship"
+  - "eligibility"
+  - "requirements"
+  - "application"
+
+# Output settings
+output_dir: "data"
+output_file: "crawled_pages.json"
+
+# User agent
+user_agent: "Mozilla/5.0 (compatible; ImmigrationCrawler/1.0; Educational Purpose)"
