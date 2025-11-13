@@ -32,8 +32,10 @@ class EnhancedRetriever:
             from services.assistant.embeddings import SemanticRetriever
             self.semantic_retriever = SemanticRetriever()
             self.logger.info("✅ Semantic search enabled")
-        except ImportError:
-            self.logger.warning("⚠️  Semantic search not available. Install: pip install sentence-transformers")
+        except (ImportError, OSError, Exception) as e:
+            self.logger.warning(f"⚠️  Semantic search not available: {str(e)[:100]}")
+            self.logger.info("💡 Falling back to keyword-only search (works fine!)")
+            self.semantic_retriever = None
 
         # Try to load reranker
         try:
@@ -41,8 +43,10 @@ class EnhancedRetriever:
             # Lightweight reranker model (50MB)
             self.reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
             self.logger.info("✅ Reranking enabled")
-        except ImportError:
-            self.logger.warning("⚠️  Reranking not available. Install: pip install sentence-transformers")
+        except (ImportError, OSError, Exception) as e:
+            self.logger.warning(f"⚠️  Reranking not available: {str(e)[:100]}")
+            self.logger.info("💡 Using standard ranking (works fine!)")
+            self.reranker = None
 
         # Index visas on init (if semantic search available)
         if self.semantic_retriever:
