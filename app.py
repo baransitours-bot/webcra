@@ -66,7 +66,7 @@ def main():
 
     page = st.sidebar.radio(
         "Navigation",
-        ["🏠 Home", "👤 Build Profile", "🔍 Find Visas", "💬 AI Assistant", "📊 Admin Tools"]
+        ["🏠 Home", "👤 Build Profile", "🔍 Find Visas", "📋 Documents", "⏱️ Timeline", "💰 Cost Calculator", "💬 AI Assistant", "📊 Admin Tools"]
     )
 
     # Main content
@@ -76,6 +76,12 @@ def main():
         show_profile_builder()
     elif page == "🔍 Find Visas":
         show_visa_matcher()
+    elif page == "📋 Documents":
+        show_document_checklist()
+    elif page == "⏱️ Timeline":
+        show_timeline_estimator()
+    elif page == "💰 Cost Calculator":
+        show_cost_calculator()
     elif page == "💬 AI Assistant":
         show_ai_assistant()
     elif page == "📊 Admin Tools":
@@ -92,7 +98,7 @@ def show_home_page():
     with col1:
         st.markdown("""
         <div class="stat-box">
-            <h2>5</h2>
+            <h2>6</h2>
             <p>Countries</p>
         </div>
         """, unsafe_allow_html=True)
@@ -100,7 +106,7 @@ def show_home_page():
     with col2:
         st.markdown("""
         <div class="stat-box">
-            <h2>100+</h2>
+            <h2>13+</h2>
             <p>Visa Types</p>
         </div>
         """, unsafe_allow_html=True)
@@ -147,7 +153,7 @@ def show_home_page():
         st.markdown("""
         <div class="feature-box">
             <h3>📊 Multiple Countries</h3>
-            <p>Compare visa options across Australia, Canada, UK, Germany, and UAE all in one place.</p>
+            <p>Compare visa options across USA, Australia, Canada, UK, Germany, and UAE all in one place.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -217,8 +223,8 @@ def show_profile_builder():
 
             countries = st.multiselect(
                 "Countries of Interest",
-                ["Australia", "Canada", "UK", "Germany", "UAE"],
-                default=["Australia", "Canada"]
+                ["USA", "Australia", "Canada", "UK", "Germany", "UAE"],
+                default=["USA", "Canada"]
             )
 
         submit = st.form_submit_button("💾 Save Profile & Find Visas")
@@ -474,7 +480,7 @@ def show_admin_tools():
         with col1:
             countries = st.multiselect(
                 "Select Countries to Crawl",
-                ["Australia", "Canada", "UK", "Germany", "UAE"],
+                ["USA", "Australia", "Canada", "UK", "Germany", "UAE"],
                 default=[]
             )
 
@@ -560,6 +566,261 @@ def show_admin_tools():
 
         except Exception as e:
             st.error(f"Error loading statistics: {str(e)}")
+
+def show_document_checklist():
+    """Document checklist generator page"""
+    st.title("📋 Document Checklist Generator")
+    st.markdown("Get a comprehensive list of documents needed for your visa application")
+
+    # Visa selection
+    try:
+        from services.assistant.visa_utils import load_visa_data, VisaDocumentGenerator
+
+        all_visas = load_visa_data()
+
+        if not all_visas:
+            st.error("❌ No visa data found. Please run the system setup first.")
+            return
+
+        # Create visa options
+        visa_options = {f"{v['visa_type']} ({v['country']})": v for v in all_visas}
+
+        selected_visa_name = st.selectbox(
+            "Select Visa Type",
+            options=list(visa_options.keys()),
+            help="Choose the visa you want to apply for"
+        )
+
+        if st.button("📋 Generate Document Checklist", type="primary"):
+            visa_data = visa_options[selected_visa_name]
+
+            doc_gen = VisaDocumentGenerator()
+            checklist = doc_gen.generate_checklist(visa_data)
+
+            st.success(f"✅ Checklist generated for {visa_data['visa_type']}")
+
+            # Display visa info
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Country", visa_data['country'].upper())
+            with col2:
+                st.metric("Category", visa_data['category'].title())
+            with col3:
+                st.metric("Processing Time", visa_data.get('processing_time', 'N/A'))
+
+            st.markdown("---")
+
+            # Required documents
+            st.subheader("📄 Required Documents")
+            st.markdown("*These documents are **mandatory** for your application*")
+
+            for i, doc in enumerate(checklist['documents']['required'], 1):
+                st.checkbox(doc, key=f"req_{i}")
+
+            # Recommended documents
+            st.markdown("---")
+            st.subheader("⭐ Recommended Documents")
+            st.markdown("*These documents strengthen your application*")
+
+            for i, doc in enumerate(checklist['documents']['recommended'], 1):
+                st.checkbox(doc, key=f"rec_{i}")
+
+            # Optional documents
+            st.markdown("---")
+            st.subheader("➕ Optional Documents")
+            st.markdown("*Additional documents that may help*")
+
+            for i, doc in enumerate(checklist['documents']['optional'], 1):
+                st.checkbox(doc, key=f"opt_{i}")
+
+            # Export checklist
+            st.markdown("---")
+            if st.button("💾 Download Checklist as Text"):
+                # Create text version
+                text_content = f"DOCUMENT CHECKLIST\n"
+                text_content += f"Visa: {visa_data['visa_type']}\n"
+                text_content += f"Country: {visa_data['country']}\n\n"
+                text_content += "REQUIRED DOCUMENTS:\n"
+                for i, doc in enumerate(checklist['documents']['required'], 1):
+                    text_content += f"{i}. [ ] {doc}\n"
+                text_content += "\nRECOMMENDED DOCUMENTS:\n"
+                for i, doc in enumerate(checklist['documents']['recommended'], 1):
+                    text_content += f"{i}. [ ] {doc}\n"
+                text_content += "\nOPTIONAL DOCUMENTS:\n"
+                for i, doc in enumerate(checklist['documents']['optional'], 1):
+                    text_content += f"{i}. [ ] {doc}\n"
+
+                st.download_button(
+                    label="📥 Download Checklist",
+                    data=text_content,
+                    file_name=f"{visa_data['country']}_{visa_data['visa_type']}_checklist.txt",
+                    mime="text/plain"
+                )
+
+    except Exception as e:
+        st.error(f"❌ Error: {str(e)}")
+        st.exception(e)
+
+def show_timeline_estimator():
+    """Timeline estimation page"""
+    st.title("⏱️ Visa Processing Timeline")
+    st.markdown("Understand the timeline for your visa application process")
+
+    try:
+        from services.assistant.visa_utils import load_visa_data, VisaTimelineEstimator
+
+        all_visas = load_visa_data()
+
+        if not all_visas:
+            st.error("❌ No visa data found.")
+            return
+
+        # Visa selection
+        visa_options = {f"{v['visa_type']} ({v['country']})": v for v in all_visas}
+
+        selected_visa_name = st.selectbox(
+            "Select Visa Type",
+            options=list(visa_options.keys())
+        )
+
+        if st.button("⏱️ View Timeline", type="primary"):
+            visa_data = visa_options[selected_visa_name]
+
+            timeline_est = VisaTimelineEstimator()
+            timeline = timeline_est.get_timeline(visa_data)
+
+            st.success(f"✅ Timeline for {visa_data['visa_type']}")
+
+            # Total time
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Country", visa_data['country'].upper())
+            with col2:
+                st.metric("Total Processing Time", timeline['total_time'])
+            with col3:
+                success_rate = visa_data.get('success_rate', 'N/A')
+                st.metric("Success Rate", success_rate)
+
+            st.markdown("---")
+
+            # Timeline stages
+            st.subheader("📅 Processing Stages")
+
+            for stage in timeline['stages']:
+                with st.expander(f"**Step {stage['step']}: {stage['name']}** - ⏱️ {stage['estimated_time']}"):
+                    st.write(stage['description'])
+
+                    # Progress bar (visual only)
+                    if stage.get('estimated_time') != 'Varies':
+                        st.progress(0.0, text="Not started")
+
+            # Important notes
+            st.markdown("---")
+            st.info("""
+            **💡 Important Notes:**
+            - Timelines are estimates and may vary based on individual circumstances
+            - Premium processing (if available) can significantly reduce wait times
+            - Complete applications process faster than incomplete ones
+            - Check official government websites for most current processing times
+            """)
+
+            # Additional info
+            if 'annual_cap' in visa_data:
+                st.warning(f"⚠️ **Annual Cap:** {visa_data['annual_cap']} - Apply early!")
+
+    except Exception as e:
+        st.error(f"❌ Error: {str(e)}")
+        st.exception(e)
+
+def show_cost_calculator():
+    """Cost calculator page"""
+    st.title("💰 Visa Cost Calculator")
+    st.markdown("Calculate the total cost of your visa application")
+
+    try:
+        from services.assistant.visa_utils import load_visa_data, VisaCostCalculator
+
+        all_visas = load_visa_data()
+
+        if not all_visas:
+            st.error("❌ No visa data found.")
+            return
+
+        # Visa selection
+        visa_options = {f"{v['visa_type']} ({v['country']})": v for v in all_visas}
+
+        selected_visa_name = st.selectbox(
+            "Select Visa Type",
+            options=list(visa_options.keys())
+        )
+
+        # Optional services
+        include_optional = st.checkbox(
+            "Include optional services (premium processing, etc.)",
+            value=False
+        )
+
+        if st.button("💰 Calculate Costs", type="primary"):
+            visa_data = visa_options[selected_visa_name]
+
+            cost_calc = VisaCostCalculator()
+            costs = cost_calc.calculate_costs(visa_data, include_optional)
+
+            st.success(f"✅ Cost estimate for {visa_data['visa_type']}")
+
+            # Total costs
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Country", visa_data['country'].upper())
+            with col2:
+                st.metric("Minimum Total", f"${costs['total_min']:,.0f}")
+            with col3:
+                st.metric("Maximum Total", f"${costs['total_max']:,.0f}")
+
+            st.markdown("---")
+
+            # Cost breakdown
+            st.subheader("💵 Cost Breakdown")
+
+            breakdown_data = []
+            for item, details in costs['breakdown'].items():
+                optional_tag = " (Optional)" if details['optional'] else ""
+                breakdown_data.append({
+                    "Item": details['description'] + optional_tag,
+                    "Cost Range": details['cost'],
+                    "Min": f"${details['min']:,.0f}",
+                    "Max": f"${details['max']:,.0f}"
+                })
+
+            if breakdown_data:
+                import pandas as pd
+                df = pd.DataFrame(breakdown_data)
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+            # Additional costs
+            st.markdown("---")
+            st.subheader("➕ Additional Costs to Consider")
+
+            for cost_item in costs.get('additional_costs', []):
+                st.write(f"- **{cost_item['item']}**: {cost_item['cost']}")
+
+            # Summary
+            st.markdown("---")
+            st.info(f"""
+            **💡 Budget Summary:**
+            - **Estimated Range**: ${costs['total_min']:,.0f} - ${costs['total_max']:,.0f}
+            - **Currency**: {costs['currency']}
+            - **Note**: This does not include additional costs listed above (translations, medical exams, etc.)
+            - **Recommendation**: Budget at least 20-30% more for unexpected expenses
+            """)
+
+            # Detailed breakdown for financial planning
+            total_with_buffer = costs['total_max'] * 1.25
+            st.success(f"💰 **Recommended Budget with 25% buffer**: ${total_with_buffer:,.0f}")
+
+    except Exception as e:
+        st.error(f"❌ Error: {str(e)}")
+        st.exception(e)
 
 if __name__ == "__main__":
     main()
