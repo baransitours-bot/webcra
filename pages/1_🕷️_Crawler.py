@@ -145,68 +145,79 @@ with tab2:
                 logs = []
 
                 try:
-                    from services.crawler.main import ImmigrationCrawler
+                    from services.crawler.spider import ImmigrationCrawler
                     import yaml
 
-                    # Load config
+                    # Load global config (for country definitions)
+                    with open('config.yaml', 'r') as f:
+                        global_config = yaml.safe_load(f)
+
+                    # Load crawler config
                     with open('services/crawler/config.yaml', 'r') as f:
                         crawler_config = yaml.safe_load(f)
 
-                    # Override with user settings
-                    total_pages = len(config['countries']) * config['max_pages']
-                    pages_crawled = 0
+                    # Override max_pages in crawler config
+                    crawler_config['crawling']['max_pages_per_domain'] = config['max_pages']
+
+                    # Get country configurations
+                    countries_to_crawl = [
+                        global_config['countries'][country]
+                        for country in config['countries']
+                        if country in global_config['countries']
+                    ]
+
+                    if not countries_to_crawl:
+                        st.error("❌ No valid countries selected")
+                        st.stop()
 
                     logs.append(f"[INFO] Starting crawler for countries: {', '.join(config['countries'])}")
                     logs.append(f"[INFO] Max pages per country: {config['max_pages']}")
+                    logs.append(f"[INFO] Max depth: {config['max_depth']}")
                     log_area.code('\n'.join(logs))
 
-                    # Run crawler for each country
-                    for country in config['countries']:
-                        logs.append(f"\n[INFO] Crawling {country}...")
-                        log_area.code('\n'.join(logs))
+                    # Initialize crawler with proper arguments
+                    crawler = ImmigrationCrawler(countries_to_crawl, crawler_config)
 
-                        # Update status
-                        status_text.text(f"Crawling {country}... ({pages_crawled}/{total_pages} pages)")
+                    logs.append(f"[INFO] Crawler initialized successfully")
+                    log_area.code('\n'.join(logs))
 
-                        # Initialize crawler
-                        crawler = ImmigrationCrawler()
+                    # Simulate progress (since actual crawler doesn't have progress callback yet)
+                    total_pages = len(config['countries']) * config['max_pages']
+                    pages_crawled = 0
 
-                        # Crawl (simplified - actual implementation would stream progress)
-                        logs.append(f"[INFO] Initialized crawler for {country}")
-                        log_area.code('\n'.join(logs))
+                    # Update status
+                    status_text.text(f"Starting crawl... (0/{total_pages} pages)")
+                    progress_bar.progress(0.1)
 
-                        # Simulate progress
-                        for i in range(config['max_pages']):
-                            pages_crawled += 1
-                            progress = pages_crawled / total_pages
-                            progress_bar.progress(progress)
-                            status_text.text(f"Crawling {country}... ({pages_crawled}/{total_pages} pages)")
+                    logs.append(f"[INFO] Beginning crawl process...")
+                    log_area.code('\n'.join(logs[-20:]))
 
-                            logs.append(f"[INFO] {country}: Crawled page {i+1}/{config['max_pages']}")
-                            log_area.code('\n'.join(logs[-20:]))  # Show last 20 logs
+                    # Run the actual crawler
+                    # Note: This will block until complete - in future we can make it async
+                    crawler.crawl_all()
 
-                            time.sleep(0.1)  # Simulate work
-
-                        logs.append(f"[SUCCESS] {country}: Completed {config['max_pages']} pages")
-                        log_area.code('\n'.join(logs[-20:]))
+                    # Since we can't track real progress yet, simulate completion
+                    logs.append(f"[SUCCESS] Crawling completed!")
+                    logs.append(f"[INFO] Pages have been saved to data/raw/")
+                    log_area.code('\n'.join(logs))
 
                     # Completion
                     progress_bar.progress(1.0)
-                    status_text.text(f"✅ Completed! Crawled {pages_crawled} pages")
+                    status_text.text(f"✅ Completed! Check data/raw/ for results")
 
-                    logs.append(f"\n[SUCCESS] Crawling completed!")
-                    logs.append(f"[INFO] Total pages crawled: {pages_crawled}")
-                    logs.append(f"[INFO] Data saved to: data/raw/")
-                    log_area.code('\n'.join(logs))
+                    # Count actual files crawled
+                    from pathlib import Path
+                    raw_dir = Path("data/raw")
+                    actual_files = list(raw_dir.rglob("*.json")) if raw_dir.exists() else []
 
                     # Save results to session
                     st.session_state['crawler_results'] = {
-                        'pages_crawled': pages_crawled,
+                        'pages_crawled': len(actual_files),
                         'countries': config['countries'],
                         'status': 'completed'
                     }
 
-                    st.success(f"✅ Crawling completed successfully! Crawled {pages_crawled} pages")
+                    st.success(f"✅ Crawling completed successfully! Saved {len(actual_files)} pages")
                     st.info("📂 View results in the **Results** tab")
 
                 except Exception as e:
