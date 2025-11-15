@@ -1,11 +1,12 @@
 """
-Classifier Service Page
-Extract structured visa data from crawled pages
+Classifier Service Page - Fixed Version
+Extract structured visa data using LLM with full customization
 """
 
 import streamlit as st
 import sys
 from pathlib import Path
+import json
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -22,94 +23,121 @@ st.markdown("---")
 tab1, tab2, tab3 = st.tabs(["⚙️ Configuration", "▶️ Run", "📊 Results"])
 
 with tab1:
-    st.subheader("⚙️ Configuration")
+    st.subheader("⚙️ LLM Configuration")
 
-    # Config mode
-    config_mode = st.radio(
-        "Configuration Mode",
-        ["Use Default Config", "Custom Configuration"],
-        help="Choose how to configure the classifier"
-    )
+    col1, col2 = st.columns([1, 1])
 
-    if config_mode == "Custom Configuration":
-        st.markdown("### Custom Settings")
+    with col1:
+        # Provider
+        llm_provider = st.selectbox(
+            "LLM Provider",
+            ["openrouter", "openai"],
+            index=0,
+            help="OpenRouter offers FREE models"
+        )
 
-        col1, col2 = st.columns(2)
+        # Custom model checkbox
+        use_custom_model = st.checkbox(
+            "🎯 Use Custom Model",
+            value=False,
+            help="Enter any model name from your provider"
+        )
 
-        with col1:
-            # LLM Provider
-            llm_provider = st.selectbox(
-                "LLM Provider",
-                ["openrouter", "openai"],
-                index=0,
-                help="OpenRouter is FREE with some models"
+    with col2:
+        if use_custom_model:
+            # Custom model input
+            model = st.text_input(
+                "Custom Model Name",
+                value="",
+                placeholder="e.g., google/gemini-pro, anthropic/claude-3.5-sonnet",
+                help="Enter the FULL model name from your provider"
             )
 
-            # Model selection
+            st.info(f"""
+            **Common {llm_provider.upper()} models:**
+            - OpenRouter: `google/gemini-2.0-flash-001:free`, `anthropic/claude-3.5-sonnet`, `openai/gpt-4o`
+            - OpenAI: `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`
+
+            Get model names from:
+            - OpenRouter: https://openrouter.ai/models
+            - OpenAI: https://platform.openai.com/docs/models
+            """)
+        else:
+            # Predefined models
             if llm_provider == "openrouter":
                 model_options = [
                     "google/gemini-2.0-flash-001:free",
                     "meta-llama/llama-3.2-3b-instruct:free",
-                    "microsoft/phi-3-mini-128k-instruct:free"
+                    "anthropic/claude-3.5-sonnet",
+                    "google/gemini-pro",
+                    "openai/gpt-4o-mini"
                 ]
-                default_model = "google/gemini-2.0-flash-001:free"
             else:
-                model_options = ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"]
-                default_model = "gpt-4o-mini"
+                model_options = [
+                    "gpt-4o-mini",
+                    "gpt-4o",
+                    "gpt-4-turbo",
+                    "gpt-3.5-turbo"
+                ]
 
             model = st.selectbox(
                 "Model",
                 model_options,
-                index=0
+                index=0,
+                help="Select a predefined model"
             )
 
-        with col2:
-            # Batch size
+    st.markdown("---")
+
+    # Advanced settings
+    with st.expander("⚙️ Advanced Settings"):
+        col1, col2 = st.columns(2)
+
+        with col1:
             batch_size = st.number_input(
                 "Batch Size",
                 min_value=1,
                 max_value=50,
                 value=5,
-                help="Number of pages to process at once"
+                help="Pages to process before saving"
             )
 
+            show_llm_response = st.checkbox(
+                "Show LLM Responses",
+                value=False,
+                help="Display raw LLM output for debugging"
+            )
+
+        with col2:
             # Country filter
             countries_filter = st.multiselect(
-                "Process Only These Countries",
-                ["australia", "canada", "uk", "germany", "usa", "uae"],
+                "Filter by Countries",
+                ["australia", "canada", "uk", "germany", "usa", "uae", "china", "japan"],
                 default=[],
-                help="Leave empty to process all"
+                help="Leave empty to process all countries"
             )
 
-        # API Key
-        st.markdown("### API Key")
-        api_key_input = st.text_input(
-            f"{llm_provider.upper()} API Key",
-            type="password",
-            help="Enter your API key or leave empty to use environment variable"
-        )
+    # API Key
+    st.markdown("---")
+    st.markdown("### 🔑 API Key (Optional)")
+    api_key_input = st.text_input(
+        f"{llm_provider.upper()} API Key",
+        type="password",
+        help="Leave empty to use .env file",
+        placeholder="sk-... (optional if already in .env)"
+    )
 
-        # Save config
-        st.session_state['classifier_config'] = {
-            'llm_provider': llm_provider,
-            'model': model,
-            'batch_size': batch_size,
-            'countries_filter': countries_filter,
-            'api_key': api_key_input
-        }
+    # Save config to session
+    st.session_state['classifier_config'] = {
+        'llm_provider': llm_provider,
+        'model': model,
+        'batch_size': batch_size,
+        'countries_filter': countries_filter,
+        'api_key': api_key_input,
+        'show_llm_response': show_llm_response
+    }
 
-        st.success("✅ Custom configuration saved")
-
-    else:
-        st.info("""
-        **Default Configuration:**
-        - LLM Provider: OpenRouter (FREE)
-        - Model: google/gemini-2.0-flash-001:free
-        - Batch Size: 5 pages
-        - Countries: All
-
-        **Note:** Set OPENROUTER_API_KEY environment variable
-        """)
+    st.success("✅ Configuration saved to session")
 
 with tab2:
     st.subheader("▶️ Run Classifier")
@@ -123,73 +151,65 @@ with tab2:
             'model': 'google/gemini-2.0-flash-001:free',
             'batch_size': 5,
             'countries_filter': [],
-            'api_key': ''
+            'api_key': '',
+            'show_llm_response': False
         }
 
     # Show current config
-    st.markdown("#### Current Configuration:")
-    col1, col2, col3 = st.columns(3)
+    st.markdown("#### 📋 Current Configuration:")
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Provider", config['llm_provider'].upper())
     with col2:
-        st.metric("Model", config['model'].split('/')[-1][:20])
+        # Show full model name (may be long)
+        model_name = config['model']
+        if len(model_name) > 25:
+            model_display = model_name[:22] + "..."
+        else:
+            model_display = model_name
+        st.metric("Model", model_display)
     with col3:
         st.metric("Batch Size", config['batch_size'])
+    with col4:
+        api_status = "✅ Set" if config['api_key'] else "🌍 From .env"
+        st.metric("API Key", api_status)
+
+    # Show full model name
+    st.caption(f"Full model: `{config['model']}`")
 
     # Check data source
     st.markdown("---")
-    st.markdown("#### Data Source:")
+    st.markdown("#### 📂 Data Source:")
 
-    data_source = st.radio(
-        "Source",
-        ["Database (Crawled Pages)", "Files (data/raw/)"],
-        help="Choose where to load crawled pages from"
-    )
+    try:
+        from shared.database import Database
+        db = Database()
+        pages = db.get_latest_pages()
 
-    # Show available data
-    if data_source == "Database (Crawled Pages)":
-        try:
-            from shared.database import Database
-            db = Database()
-            pages = db.get_latest_pages()
+        if pages:
+            st.success(f"✅ Found {len(pages)} crawled pages in database")
 
-            if pages:
-                st.success(f"✅ Found {len(pages)} crawled pages in database")
+            # Group by country
+            by_country = {}
+            for page in pages:
+                country = page['country']
+                by_country[country] = by_country.get(country, 0) + 1
 
-                # Group by country
-                by_country = {}
-                for page in pages:
-                    country = page['country']
-                    by_country[country] = by_country.get(country, 0) + 1
-
-                st.write("**Pages by country:**")
-                for country, count in by_country.items():
-                    st.write(f"- {country.title()}: {count} pages")
-            else:
-                st.warning("⚠️ No crawled pages found in database. Run Crawler first!")
-                st.stop()
-
-        except Exception as e:
-            st.error(f"❌ Error loading from database: {str(e)}")
-            st.stop()
-
-    else:
-        raw_dir = Path("data/raw")
-        if not raw_dir.exists():
-            st.error("❌ data/raw directory not found!")
-            st.stop()
-
-        files = list(raw_dir.rglob("*.json"))
-        if files:
-            st.success(f"✅ Found {len(files)} JSON files")
+            st.write("**Pages by country:**")
+            for country, count in sorted(by_country.items()):
+                st.write(f"- {country.title()}: {count} pages")
         else:
-            st.warning("⚠️ No files found in data/raw/. Run Crawler first!")
+            st.warning("⚠️ No crawled pages found in database. Run Crawler first!")
             st.stop()
+
+    except Exception as e:
+        st.error(f"❌ Error loading from database: {str(e)}")
+        st.stop()
 
     st.markdown("---")
 
     # Run button
-    if st.button("▶️ Start Classification", type="primary", use_container_width=True):
+    if st.button("▶️ Start Classification", type="primary"):
 
         progress_container = st.container()
 
@@ -203,71 +223,75 @@ with tab2:
             # Log area
             log_container = st.expander("📋 Live Logs", expanded=True)
 
+            # LLM response area (if enabled)
+            if config['show_llm_response']:
+                llm_response_container = st.expander("🤖 LLM Responses (Debug)", expanded=False)
+
             with log_container:
                 log_area = st.empty()
 
                 import time
+                import os
                 logs = []
 
                 try:
-                    from shared.database import Database
-                    import yaml
-                    import os
-
-                    # Load classifier config
-                    with open('services/classifier/config.yaml', 'r') as f:
-                        classifier_config = yaml.safe_load(f)
-
-                    # Override with user settings
-                    classifier_config['llm']['provider'] = config['llm_provider']
-
-                    if config['llm_provider'] == 'openrouter':
-                        classifier_config['llm']['openrouter']['model'] = config['model']
-                        if config['api_key']:
+                    # Set API key in environment if provided
+                    if config['api_key']:
+                        if config['llm_provider'] == 'openrouter':
                             os.environ['OPENROUTER_API_KEY'] = config['api_key']
-                    else:
-                        classifier_config['llm']['openai']['model'] = config['model']
-                        if config['api_key']:
+                        else:
                             os.environ['OPENAI_API_KEY'] = config['api_key']
+
+                    # Override ConfigManager settings
+                    from shared.config_manager import get_config
+                    cfg_manager = get_config()
+                    cfg_manager.set('llm.provider', config['llm_provider'])
+                    cfg_manager.set('llm.model', config['model'])
 
                     logs.append(f"[INFO] Starting classification...")
                     logs.append(f"[INFO] Provider: {config['llm_provider']}")
                     logs.append(f"[INFO] Model: {config['model']}")
+                    logs.append(f"[INFO] Debug mode: {'ON' if config['show_llm_response'] else 'OFF'}")
                     log_area.code('\n'.join(logs))
 
-                    # Load pages from database
-                    db = Database()
-                    pages = db.get_latest_pages()
-
-                    # Filter by country if needed
+                    # Filter pages
+                    filtered_pages = pages
                     if config['countries_filter']:
-                        pages = [p for p in pages if p['country'] in config['countries_filter']]
+                        filtered_pages = [p for p in pages if p['country'] in config['countries_filter']]
+                        logs.append(f"[INFO] Filtered to {len(filtered_pages)} pages from: {', '.join(config['countries_filter'])}")
 
-                    total_pages = len(pages)
+                    total_pages = len(filtered_pages)
                     logs.append(f"[INFO] Processing {total_pages} pages...")
                     log_area.code('\n'.join(logs))
 
-                    # Process in batches
+                    # Initialize extractor (will use updated ConfigManager)
                     from services.classifier.visa_extractor import VisaExtractor
-
-                    # VisaExtractor auto-loads config from ConfigManager
                     extractor = VisaExtractor()
+
                     all_visas = []
                     pages_processed = 0
+                    visas_extracted = 0
 
                     status_text.text(f"Processing... (0/{total_pages} pages)")
-                    progress_bar.progress(0.1)
+                    progress_bar.progress(0.05)
 
-                    for i, page in enumerate(pages):
+                    for i, page in enumerate(filtered_pages):
                         try:
-                            logs.append(f"\n[INFO] Processing: {page['title'][:60]}...")
-                            log_area.code('\n'.join(logs[-20:]))
+                            logs.append(f"\n[{i+1}/{total_pages}] Processing: {page['title'][:60]}...")
+                            log_area.code('\n'.join(logs[-25:]))
 
-                            # Extract visa from page content
+                            # Extract visa
                             visa_data = extractor.extract_visa_from_text(
                                 page['content'],
                                 page['country']
                             )
+
+                            # Show LLM response if debug mode
+                            if config['show_llm_response'] and visa_data:
+                                with llm_response_container:
+                                    st.markdown(f"**Page {i+1}: {page['title'][:50]}**")
+                                    st.json(visa_data)
+                                    st.markdown("---")
 
                             if visa_data:
                                 # Save to database
@@ -278,51 +302,54 @@ with tab2:
                                     requirements=visa_data.get('requirements', {}),
                                     fees=visa_data.get('fees', {}),
                                     processing_time=visa_data.get('processing_time', 'Not specified'),
-                                    documents_required=visa_data.get('documents_required', []),
-                                    timeline_stages=visa_data.get('timeline_stages', {}),
-                                    cost_breakdown=visa_data.get('cost_breakdown', {}),
+                                    documents_required=visa_data.get('eligibility_criteria', []),
+                                    timeline_stages=[],
+                                    cost_breakdown={},
                                     source_urls=[page['url']]
                                 )
 
                                 all_visas.append(visa_data)
-                                logs.append(f"[SUCCESS] Extracted: {visa_data.get('visa_type', 'Unknown')}")
+                                visas_extracted += 1
+                                logs.append(f"[SUCCESS] ✅ Extracted: {visa_data.get('visa_type', 'Unknown')}")
                             else:
-                                logs.append(f"[WARNING] No visa data found in page")
+                                logs.append(f"[SKIP] ⏭️ No visa data found")
 
                             pages_processed += 1
                             progress = pages_processed / total_pages
                             progress_bar.progress(progress)
-                            status_text.text(f"Processing... ({pages_processed}/{total_pages} pages)")
-                            log_area.code('\n'.join(logs[-20:]))
+                            status_text.text(f"Processing... ({pages_processed}/{total_pages} pages, {visas_extracted} visas found)")
+                            log_area.code('\n'.join(logs[-25:]))
 
                             # Small delay to avoid rate limiting
-                            time.sleep(0.5)
+                            time.sleep(0.3)
 
                         except Exception as e:
-                            logs.append(f"[ERROR] Failed to process page: {str(e)}")
-                            log_area.code('\n'.join(logs[-20:]))
+                            logs.append(f"[ERROR] ❌ Failed: {str(e)[:100]}")
+                            log_area.code('\n'.join(logs[-25:]))
                             continue
 
                     # Completion
                     progress_bar.progress(1.0)
-                    status_text.text(f"✅ Completed! Processed {pages_processed} pages, extracted {len(all_visas)} visas")
+                    status_text.text(f"✅ Completed! Processed {pages_processed} pages, extracted {visas_extracted} visas")
 
-                    logs.append(f"\n[SUCCESS] Classification completed!")
-                    logs.append(f"[INFO] Total pages processed: {pages_processed}")
-                    logs.append(f"[INFO] Total visas extracted: {len(all_visas)}")
+                    logs.append(f"\n[SUCCESS] ==================== COMPLETED ====================")
+                    logs.append(f"[INFO] Pages processed: {pages_processed}")
+                    logs.append(f"[INFO] Visas extracted: {visas_extracted}")
+                    logs.append(f"[INFO] Success rate: {(visas_extracted/pages_processed*100):.1f}%")
                     logs.append(f"[INFO] Data saved to database with versioning")
                     log_area.code('\n'.join(logs))
 
                     # Save results to session
                     st.session_state['classifier_results'] = {
                         'pages_processed': pages_processed,
-                        'visas_extracted': len(all_visas),
+                        'visas_extracted': visas_extracted,
                         'visas': all_visas,
-                        'status': 'completed'
+                        'status': 'completed',
+                        'model_used': config['model']
                     }
 
-                    st.success(f"✅ Classification completed! Extracted {len(all_visas)} visas")
-                    st.info("📂 View results in the **Results** tab")
+                    st.success(f"✅ Classification completed! Extracted {visas_extracted} visas from {pages_processed} pages")
+                    st.info("📊 View results in the **Results** tab →")
 
                 except Exception as e:
                     st.error(f"❌ Error during classification: {str(e)}")
@@ -337,60 +364,47 @@ with tab3:
     if 'classifier_results' in st.session_state:
         results = st.session_state['classifier_results']
 
-        # Metrics
-        col1, col2, col3 = st.columns(3)
+        # Summary metrics
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Pages Processed", results['pages_processed'])
         with col2:
             st.metric("Visas Extracted", results['visas_extracted'])
         with col3:
-            st.metric("Status", results['status'].upper())
+            success_rate = (results['visas_extracted'] / results['pages_processed'] * 100) if results['pages_processed'] > 0 else 0
+            st.metric("Success Rate", f"{success_rate:.1f}%")
+        with col4:
+            st.metric("Model Used", results['model_used'].split('/')[-1][:15])
 
         st.markdown("---")
 
-        # Visas preview
+        # Show visas
         if results['visas']:
-            st.markdown("#### Extracted Visas:")
+            st.markdown(f"### Extracted Visas ({len(results['visas'])})")
 
-            for i, visa in enumerate(results['visas'][:10], 1):
-                with st.expander(f"{i}. {visa.get('visa_type', 'Unknown')} ({visa.get('country', 'Unknown')})"):
+            for i, visa in enumerate(results['visas'], 1):
+                with st.expander(f"{i}. {visa.get('visa_type', 'Unknown')} ({visa.get('category', 'unknown')})"):
                     st.json(visa)
 
-            if len(results['visas']) > 10:
-                st.info(f"... and {len(results['visas']) - 10} more visas")
+            # Export button
+            st.markdown("---")
+            export_data = json.dumps(results['visas'], indent=2)
+            st.download_button(
+                "📥 Download Results as JSON",
+                data=export_data,
+                file_name=f"classified_visas_{results['model_used'].replace('/', '_')}.json",
+                mime="application/json"
+            )
+        else:
+            st.warning("⚠️ No visas were extracted. Check the logs for details.")
 
         st.markdown("---")
-
-        # Database stats
-        st.markdown("#### Database Statistics:")
-
-        try:
-            from shared.database import Database
-            db = Database()
-            stats = db.get_stats()
-
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Pages", stats['pages_crawled'])
-            with col2:
-                st.metric("Total Visas", stats['visas_total'])
-            with col3:
-                st.metric("Countries", stats['countries'])
-            with col4:
-                st.metric("Checks", stats['checks_performed'])
-
-        except Exception as e:
-            st.error(f"Error loading stats: {str(e)}")
-
-        st.markdown("---")
-
         st.info("""
-        **Next Step:**
-        Go to the **Matcher Service** to check client eligibility against extracted visas
+        **Next Steps:**
+        1. View data in 💾 **Database** page
+        2. Create embeddings: `python scripts/index_embeddings.py`
+        3. Test semantic search: `python scripts/search_semantic.py`
         """)
 
     else:
-        st.info("No classification results yet. Run the classifier from the **Run** tab.")
-
-st.markdown("---")
-st.caption("Classifier Service - Part of Immigration Platform")
+        st.info("ℹ️ No results yet. Run the classifier in the **Run** tab first.")
