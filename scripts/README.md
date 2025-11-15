@@ -7,6 +7,7 @@ All utility scripts organized in one place.
 | Script | Purpose | Usage |
 |--------|---------|-------|
 | `test_system.py` | **Test all operations** | `python scripts/test_system.py` |
+| `add_settings_table.py` | Add settings table (upgrade) | `python scripts/add_settings_table.py` |
 | `migrate_database.py` | Migrate JSON → Database | `python scripts/migrate_database.py` |
 | `check_database.py` | Quick database overview | `python scripts/check_database.py` |
 | `query_database.py` | Interactive SQL queries | `python scripts/query_database.py` |
@@ -34,6 +35,25 @@ Tests:
 ```bash
 python scripts/test_system.py
 ```
+
+---
+
+## ⚙️ add_settings_table.py
+
+**Database upgrade - adds settings table for centralized config**
+
+Run this ONCE if you have an existing database without settings table:
+
+```bash
+python scripts/add_settings_table.py
+```
+
+Adds:
+- Settings table with 10 default settings
+- Support for .env integration
+- Centralized config management
+
+**Note:** New databases auto-create this table. Only needed for upgrading old databases.
 
 ---
 
