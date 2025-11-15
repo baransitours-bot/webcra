@@ -4,6 +4,8 @@ Multi-page Streamlit application
 """
 
 import streamlit as st
+from shared.config_manager import get_config
+from shared.database import Database
 
 st.set_page_config(
     page_title="Immigration Platform",
@@ -11,9 +13,46 @@ st.set_page_config(
     layout="wide"
 )
 
+# ============ APP INITIALIZATION ============
+# Load configuration and initialize database at startup
+@st.cache_resource
+def init_app():
+    """Initialize app - runs once at startup"""
+    # Initialize database (creates tables including settings)
+    db = Database()
+
+    # Load configuration from .env > Database > YAML
+    config = get_config()
+
+    return {"db": db, "config": config}
+
+# Initialize
+app_state = init_app()
+config = app_state["config"]
+
+# Check if API key is configured
+api_key_configured = config.get_api_key() is not None
+
 # Home page
 st.title("🌍 Immigration Platform")
 st.markdown("### Multi-source visa data collection and analysis system")
+
+# Configuration status banner
+if not api_key_configured:
+    st.warning("""
+    ⚠️ **API Key Not Configured** - LLM features are disabled
+
+    **To enable AI-powered features:**
+    1. Go to ⚙️ Settings page (in sidebar)
+    2. Tab 3 → API Key Quick Setup
+    3. Paste your API key and save
+
+    **Get FREE OpenRouter key:** https://openrouter.ai/keys
+    """)
+else:
+    provider = config.get('llm.provider', 'openrouter')
+    model = config.get('llm.model', 'unknown')
+    st.success(f"✅ **System Ready** - Using {provider.title()} ({model})")
 
 st.markdown("---")
 
