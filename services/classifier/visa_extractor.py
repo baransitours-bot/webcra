@@ -12,21 +12,19 @@ from services.assistant.llm_client import LLMClient
 class VisaExtractor:
     """Extract visa information using LLM for intelligent parsing"""
 
-    def __init__(self, config: dict):
-        self.config = config
+    def __init__(self, config: dict = None):
+        self.config = config or {}
         self.logger = setup_logger('visa_extractor')
 
-        # Initialize LLM client if config has LLM section
+        # Initialize LLM client (uses ConfigManager automatically)
         self.llm_client = None
-        if 'llm' in config:
-            try:
-                self.llm_client = LLMClient(config)
-                self.logger.info("✅ LLM-based extraction enabled")
-            except Exception as e:
-                self.logger.warning(f"⚠️ LLM client initialization failed: {str(e)}")
-                self.logger.info("Falling back to pattern-based extraction")
-        else:
-            self.logger.info("No LLM config - using pattern-based extraction only")
+        try:
+            self.llm_client = LLMClient()  # Auto-uses ConfigManager
+            self.logger.info("✅ LLM-based extraction enabled")
+        except Exception as e:
+            self.logger.warning(f"⚠️ LLM client initialization failed: {str(e)[:200]}")
+            self.logger.info("💡 Falling back to pattern-based extraction")
+            self.logger.info("   Set API key in Settings page (⚙️) to enable LLM features")
 
     def extract_visa_from_text(self, text: str, country: str) -> Optional[Dict]:
         """

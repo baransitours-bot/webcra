@@ -250,7 +250,8 @@ with tab2:
                     # Process in batches
                     from services.classifier.visa_extractor import VisaExtractor
 
-                    extractor = VisaExtractor(classifier_config)
+                    # VisaExtractor auto-loads config from ConfigManager
+                    extractor = VisaExtractor()
                     all_visas = []
                     pages_processed = 0
 
