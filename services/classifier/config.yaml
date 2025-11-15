@@ -1,3 +1,19 @@
+# LLM Configuration
+llm:
+  provider: "openrouter"
+
+  openai:
+    model: "gpt-4o-mini"
+    api_key_env: "OPENAI_API_KEY"
+
+  openrouter:
+    model: "google/gemini-2.0-flash-001:free"
+    api_key_env: "OPENROUTER_API_KEY"
+    base_url: "https://openrouter.ai/api/v1"
+
+  temperature: 0.3
+  max_tokens: 2000
+
 # Classifier Configuration
 
 # Visa categories
