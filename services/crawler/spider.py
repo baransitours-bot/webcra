@@ -11,7 +11,7 @@ from datetime import datetime
 import time
 import yaml
 
-from shared.database import DataStore
+from shared.database import DataStore, Database
 from shared.logger import setup_logger
 
 class ImmigrationCrawler:
@@ -20,7 +20,8 @@ class ImmigrationCrawler:
         self.config = config
         self.visited = set()
         self.to_visit = deque()
-        self.data_store = DataStore()
+        self.data_store = DataStore()  # Keep for backward compatibility
+        self.db = Database()  # New SQLite database with versioning
         self.logger = setup_logger('crawler', 'crawler.log')
 
         self.session = requests.Session()
@@ -128,8 +129,22 @@ class ImmigrationCrawler:
                 # Extract data
                 page_data = self.extract_page_data(url, response.text, country_name, depth)
 
-                # Save to database
+                # Save to files (backward compatibility)
                 self.data_store.save_raw_page(country_name, page_data)
+
+                # Save to database with versioning
+                self.db.save_crawled_page(
+                    url=page_data['url'],
+                    country=country_name,
+                    title=page_data['title'],
+                    content=page_data['content_text'],
+                    metadata={
+                        'breadcrumbs': page_data['breadcrumbs'],
+                        'links': page_data['links'],
+                        'attachments': page_data['attachments'],
+                        'depth': page_data['depth']
+                    }
+                )
 
                 self.logger.info(f"✅ Saved: {page_data['title'][:60]}")
 
