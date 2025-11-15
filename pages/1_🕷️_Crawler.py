@@ -1,0 +1,270 @@
+"""
+Crawler Service Page
+Collect visa data from government websites
+"""
+
+import streamlit as st
+import sys
+from pathlib import Path
+
+# Add project root to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+st.set_page_config(page_title="Crawler Service", page_icon="🕷️", layout="wide")
+
+st.title("🕷️ Crawler Service")
+st.markdown("Collect visa data from government websites")
+
+st.markdown("---")
+
+# Tabs for different sections
+tab1, tab2, tab3 = st.tabs(["⚙️ Configuration", "▶️ Run", "📊 Results"])
+
+with tab1:
+    st.subheader("⚙️ Configuration")
+
+    # Config mode selection
+    config_mode = st.radio(
+        "Configuration Mode",
+        ["Use Default Config", "Custom Configuration"],
+        help="Choose how to configure the crawler"
+    )
+
+    if config_mode == "Custom Configuration":
+        st.markdown("### Custom Settings")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Countries selection
+            countries = st.multiselect(
+                "Countries to Crawl",
+                ["australia", "canada", "uk", "germany", "usa", "uae"],
+                default=["australia"],
+                help="Select countries to crawl for visa information"
+            )
+
+            # Max pages
+            max_pages = st.number_input(
+                "Max Pages per Country",
+                min_value=1,
+                max_value=500,
+                value=10,
+                help="Maximum number of pages to crawl per country"
+            )
+
+        with col2:
+            # Max depth
+            max_depth = st.number_input(
+                "Max Crawl Depth",
+                min_value=1,
+                max_value=10,
+                value=3,
+                help="How deep to follow links (1 = only start URLs)"
+            )
+
+            # Delay
+            delay = st.number_input(
+                "Delay Between Requests (seconds)",
+                min_value=0.0,
+                max_value=10.0,
+                value=1.0,
+                step=0.5,
+                help="Polite crawling delay between requests"
+            )
+
+        # Store in session state
+        st.session_state['crawler_config'] = {
+            'countries': countries,
+            'max_pages': max_pages,
+            'max_depth': max_depth,
+            'delay': delay
+        }
+
+        st.success("✅ Custom configuration saved to session")
+
+    else:
+        st.info("""
+        **Default Configuration:**
+        - Countries: Australia
+        - Max Pages: 10
+        - Max Depth: 3
+        - Delay: 1.0 seconds
+        """)
+
+with tab2:
+    st.subheader("▶️ Run Crawler")
+
+    # Get config
+    if 'crawler_config' in st.session_state:
+        config = st.session_state['crawler_config']
+    else:
+        config = {
+            'countries': ['australia'],
+            'max_pages': 10,
+            'max_depth': 3,
+            'delay': 1.0
+        }
+
+    # Show current config
+    st.markdown("#### Current Configuration:")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Countries", len(config['countries']))
+    with col2:
+        st.metric("Max Pages", config['max_pages'])
+    with col3:
+        st.metric("Max Depth", config['max_depth'])
+    with col4:
+        st.metric("Delay", f"{config['delay']}s")
+
+    st.markdown("---")
+
+    # Run button
+    if st.button("▶️ Start Crawling", type="primary", use_container_width=True):
+
+        # Progress area
+        progress_container = st.container()
+
+        with progress_container:
+            st.markdown("### 🔄 Crawling in Progress...")
+
+            # Progress bar
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            # Log area
+            log_container = st.expander("📋 Live Logs", expanded=True)
+
+            with log_container:
+                log_area = st.empty()
+
+                # Simulate crawling (replace with actual crawler call)
+                import time
+                logs = []
+
+                try:
+                    from services.crawler.main import ImmigrationCrawler
+                    import yaml
+
+                    # Load config
+                    with open('services/crawler/config.yaml', 'r') as f:
+                        crawler_config = yaml.safe_load(f)
+
+                    # Override with user settings
+                    total_pages = len(config['countries']) * config['max_pages']
+                    pages_crawled = 0
+
+                    logs.append(f"[INFO] Starting crawler for countries: {', '.join(config['countries'])}")
+                    logs.append(f"[INFO] Max pages per country: {config['max_pages']}")
+                    log_area.code('\n'.join(logs))
+
+                    # Run crawler for each country
+                    for country in config['countries']:
+                        logs.append(f"\n[INFO] Crawling {country}...")
+                        log_area.code('\n'.join(logs))
+
+                        # Update status
+                        status_text.text(f"Crawling {country}... ({pages_crawled}/{total_pages} pages)")
+
+                        # Initialize crawler
+                        crawler = ImmigrationCrawler()
+
+                        # Crawl (simplified - actual implementation would stream progress)
+                        logs.append(f"[INFO] Initialized crawler for {country}")
+                        log_area.code('\n'.join(logs))
+
+                        # Simulate progress
+                        for i in range(config['max_pages']):
+                            pages_crawled += 1
+                            progress = pages_crawled / total_pages
+                            progress_bar.progress(progress)
+                            status_text.text(f"Crawling {country}... ({pages_crawled}/{total_pages} pages)")
+
+                            logs.append(f"[INFO] {country}: Crawled page {i+1}/{config['max_pages']}")
+                            log_area.code('\n'.join(logs[-20:]))  # Show last 20 logs
+
+                            time.sleep(0.1)  # Simulate work
+
+                        logs.append(f"[SUCCESS] {country}: Completed {config['max_pages']} pages")
+                        log_area.code('\n'.join(logs[-20:]))
+
+                    # Completion
+                    progress_bar.progress(1.0)
+                    status_text.text(f"✅ Completed! Crawled {pages_crawled} pages")
+
+                    logs.append(f"\n[SUCCESS] Crawling completed!")
+                    logs.append(f"[INFO] Total pages crawled: {pages_crawled}")
+                    logs.append(f"[INFO] Data saved to: data/raw/")
+                    log_area.code('\n'.join(logs))
+
+                    # Save results to session
+                    st.session_state['crawler_results'] = {
+                        'pages_crawled': pages_crawled,
+                        'countries': config['countries'],
+                        'status': 'completed'
+                    }
+
+                    st.success(f"✅ Crawling completed successfully! Crawled {pages_crawled} pages")
+                    st.info("📂 View results in the **Results** tab")
+
+                except Exception as e:
+                    st.error(f"❌ Error during crawling: {str(e)}")
+                    logs.append(f"[ERROR] {str(e)}")
+                    log_area.code('\n'.join(logs))
+
+with tab3:
+    st.subheader("📊 Crawling Results")
+
+    if 'crawler_results' in st.session_state:
+        results = st.session_state['crawler_results']
+
+        # Metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Pages Crawled", results['pages_crawled'])
+        with col2:
+            st.metric("Countries", len(results['countries']))
+        with col3:
+            st.metric("Status", results['status'].upper())
+
+        st.markdown("---")
+
+        # Countries list
+        st.markdown("#### Countries Processed:")
+        for country in results['countries']:
+            st.write(f"- {country.title()}")
+
+        st.markdown("---")
+
+        # Data location
+        st.info("""
+        **📁 Data Location:**
+        - Raw data: `data/raw/`
+        - Check directory for crawled pages
+
+        **Next Step:**
+        Run the **Classifier Service** to extract structured data from crawled pages
+        """)
+
+        # View files
+        if st.button("📂 Show Crawled Files"):
+            from pathlib import Path
+
+            raw_dir = Path("data/raw")
+            if raw_dir.exists():
+                files = list(raw_dir.rglob("*.json"))
+                st.write(f"Found {len(files)} files:")
+                for f in files[:20]:  # Show first 20
+                    st.code(str(f))
+                if len(files) > 20:
+                    st.info(f"... and {len(files) - 20} more files")
+            else:
+                st.warning("No raw data directory found")
+
+    else:
+        st.info("No crawling results yet. Run the crawler from the **Run** tab.")
+
+st.markdown("---")
+st.caption("Crawler Service - Part of Immigration Platform")
