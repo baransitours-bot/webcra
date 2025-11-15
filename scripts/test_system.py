@@ -77,6 +77,46 @@ def test_config_sources():
             print(f"  ❌ Error reading config: {str(e)}")
 
 
+def test_config_manager():
+    """Test unified config manager"""
+    print_section("CONFIG MANAGER TEST")
+
+    try:
+        from shared.config_manager import get_config
+        from pathlib import Path
+
+        config = get_config()
+        print("✅ ConfigManager imported successfully")
+
+        # Check .env file
+        env_file = Path('.env')
+        if env_file.exists():
+            print("✅ .env file found")
+        else:
+            print("⚠️  No .env file (will use Database/YAML)")
+
+        # Test getting settings
+        llm_provider = config.get('llm.provider', 'unknown')
+        llm_model = config.get('llm.model', 'unknown')
+
+        print(f"\nActive Configuration:")
+        print(f"  Provider: {llm_provider}")
+        print(f"  Model: {llm_model}")
+
+        # Check API key
+        api_key = config.get_api_key()
+        if api_key:
+            print(f"  ✅ API Key: {api_key[:8]}... (configured)")
+        else:
+            print(f"  ⚠️  API Key: Not configured")
+
+        # Show priority
+        print(f"\nConfig Priority: .env > Database > YAML")
+
+    except Exception as e:
+        print(f"❌ ConfigManager test failed: {str(e)}")
+
+
 def test_database():
     """Test database connection and structure"""
     print_section("DATABASE TEST")
@@ -99,7 +139,7 @@ def test_database():
         expected_tables = [
             'crawled_pages', 'visas', 'clients',
             'eligibility_checks', 'documents',
-            'process_tracking', 'embeddings'
+            'process_tracking', 'embeddings', 'settings'
         ]
 
         for table in expected_tables:
@@ -336,6 +376,7 @@ def main():
     # Run all tests
     test_file_structure()
     test_config_sources()
+    test_config_manager()
     test_database()
     test_crawler()
     test_classifier()

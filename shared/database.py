@@ -165,6 +165,42 @@ class Database:
                 ON embeddings(visa_id)
             """)
 
+            # Settings (centralized configuration)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    category TEXT,
+                    description TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Insert default settings if table is empty
+            cursor.execute("SELECT COUNT(*) as count FROM settings")
+            if cursor.fetchone()['count'] == 0:
+                default_settings = [
+                    # LLM Settings
+                    ('llm.provider', 'openrouter', 'string', 'llm', 'LLM provider (openrouter or openai)'),
+                    ('llm.model', 'google/gemini-2.0-flash-001:free', 'string', 'llm', 'Model to use'),
+                    ('llm.temperature', '0.3', 'float', 'llm', 'LLM temperature (0.0-1.0)'),
+                    ('llm.max_tokens', '2000', 'integer', 'llm', 'Maximum tokens per request'),
+                    # Crawler Settings
+                    ('crawler.delay', '2.0', 'float', 'crawler', 'Delay between requests (seconds)'),
+                    ('crawler.max_pages', '50', 'integer', 'crawler', 'Maximum pages per country'),
+                    ('crawler.max_depth', '3', 'integer', 'crawler', 'Maximum crawl depth'),
+                    # Embeddings
+                    ('embeddings.model', 'all-MiniLM-L6-v2', 'string', 'embeddings', 'Embedding model name'),
+                    # Application
+                    ('app.log_level', 'INFO', 'string', 'app', 'Log level'),
+                    ('app.default_country', 'australia', 'string', 'app', 'Default country in UI'),
+                ]
+                cursor.executemany("""
+                    INSERT INTO settings (key, value, type, category, description)
+                    VALUES (?, ?, ?, ?, ?)
+                """, default_settings)
+
             conn.commit()
 
     # ============ CRAWLED PAGES ============
