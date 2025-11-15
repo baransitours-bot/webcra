@@ -147,6 +147,24 @@ class Database:
                 )
             """)
 
+            # Embeddings (for semantic search)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS embeddings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    visa_id INTEGER NOT NULL,
+                    embedding BLOB NOT NULL,
+                    model_name TEXT NOT NULL,
+                    indexed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (visa_id) REFERENCES visas(id),
+                    UNIQUE(visa_id, model_name)
+                )
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_embeddings_visa
+                ON embeddings(visa_id)
+            """)
+
             conn.commit()
 
     # ============ CRAWLED PAGES ============
@@ -376,6 +394,62 @@ class Database:
 
             return [dict(row) for row in cursor.fetchall()]
 
+    # ============ EMBEDDINGS ============
+
+    def save_embedding(self, visa_id: int, embedding: bytes, model_name: str = "all-MiniLM-L6-v2") -> int:
+        """Save embedding for a visa"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Delete old embedding for this visa+model if exists
+            cursor.execute("""
+                DELETE FROM embeddings
+                WHERE visa_id = ? AND model_name = ?
+            """, (visa_id, model_name))
+
+            # Insert new embedding
+            cursor.execute("""
+                INSERT INTO embeddings (visa_id, embedding, model_name)
+                VALUES (?, ?, ?)
+            """, (visa_id, embedding, model_name))
+
+            return cursor.lastrowid
+
+    def get_embeddings(self, model_name: str = "all-MiniLM-L6-v2") -> List[Dict]:
+        """Get all embeddings for a specific model"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT e.*, v.visa_type, v.country
+                FROM embeddings e
+                JOIN visas v ON e.visa_id = v.id
+                WHERE e.model_name = ? AND v.is_latest = 1
+            """, (model_name,))
+
+            results = []
+            for row in cursor.fetchall():
+                results.append({
+                    'visa_id': row['visa_id'],
+                    'embedding': row['embedding'],
+                    'visa_type': row['visa_type'],
+                    'country': row['country'],
+                    'indexed_at': row['indexed_at']
+                })
+
+            return results
+
+    def get_embedding(self, visa_id: int, model_name: str = "all-MiniLM-L6-v2") -> Optional[bytes]:
+        """Get embedding for a specific visa"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT embedding FROM embeddings
+                WHERE visa_id = ? AND model_name = ?
+            """, (visa_id, model_name))
+
+            row = cursor.fetchone()
+            return row['embedding'] if row else None
+
     # ============ STATISTICS ============
 
     def get_stats(self) -> Dict:
@@ -404,6 +478,10 @@ class Database:
             # Checks
             cursor.execute("SELECT COUNT(*) as count FROM eligibility_checks")
             stats['checks_performed'] = cursor.fetchone()['count']
+
+            # Embeddings
+            cursor.execute("SELECT COUNT(*) as count FROM embeddings")
+            stats['embeddings'] = cursor.fetchone()['count']
 
             return stats
 
