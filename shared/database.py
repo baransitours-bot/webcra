@@ -1,60 +1,437 @@
 """
-Database utilities
-Handles data storage and retrieval
+Database Layer - SQLite with Versioning
+Handles all data storage with version tracking
 """
 
+import sqlite3
 import json
-import os
-from typing import List, Dict
+from datetime import datetime
 from pathlib import Path
+from typing import List, Dict, Optional
+from contextlib import contextmanager
 
+
+class Database:
+    """SQLite database with versioning for visa data"""
+
+    def __init__(self, db_path: str = "data/immigration.db"):
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.init_database()
+
+    @contextmanager
+    def get_connection(self):
+        """Context manager for database connections"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row  # Return rows as dictionaries
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def init_database(self):
+        """Initialize database schema"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Crawled pages with versioning
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS crawled_pages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL,
+                    country TEXT NOT NULL,
+                    title TEXT,
+                    content TEXT,
+                    metadata TEXT,
+                    crawled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    version INTEGER DEFAULT 1,
+                    is_latest BOOLEAN DEFAULT 1,
+                    UNIQUE(url, version)
+                )
+            """)
+
+            # Create index for faster queries
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_crawled_url
+                ON crawled_pages(url, is_latest)
+            """)
+
+            # Structured visas with versioning
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS visas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    visa_type TEXT NOT NULL,
+                    country TEXT NOT NULL,
+                    category TEXT,
+                    requirements TEXT,
+                    fees TEXT,
+                    processing_time TEXT,
+                    documents_required TEXT,
+                    timeline_stages TEXT,
+                    cost_breakdown TEXT,
+                    source_urls TEXT,
+                    valid_from TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    valid_to TIMESTAMP,
+                    version INTEGER DEFAULT 1,
+                    is_latest BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(visa_type, country, version)
+                )
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_visa_latest
+                ON visas(country, is_latest)
+            """)
+
+            # Clients
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS clients (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    email TEXT,
+                    nationality TEXT,
+                    profile TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Eligibility checks (audit trail)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS eligibility_checks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_id INTEGER,
+                    visa_id INTEGER,
+                    visa_version INTEGER,
+                    check_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    profile_snapshot TEXT,
+                    requirements_snapshot TEXT,
+                    score REAL,
+                    eligible BOOLEAN,
+                    gaps TEXT,
+                    strengths TEXT,
+                    FOREIGN KEY (client_id) REFERENCES clients(id),
+                    FOREIGN KEY (visa_id) REFERENCES visas(id)
+                )
+            """)
+
+            # Documents
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_id INTEGER,
+                    doc_type TEXT,
+                    file_path TEXT,
+                    parsed_data TEXT,
+                    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (client_id) REFERENCES clients(id)
+                )
+            """)
+
+            # Process tracking
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS process_tracking (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_id INTEGER,
+                    visa_id INTEGER,
+                    status TEXT,
+                    notes TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (client_id) REFERENCES clients(id),
+                    FOREIGN KEY (visa_id) REFERENCES visas(id)
+                )
+            """)
+
+            conn.commit()
+
+    # ============ CRAWLED PAGES ============
+
+    def save_crawled_page(self, url: str, country: str, title: str,
+                         content: str, metadata: Dict) -> int:
+        """Save crawled page with automatic versioning"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Check if URL exists
+            cursor.execute("""
+                SELECT MAX(version) as max_version
+                FROM crawled_pages
+                WHERE url = ?
+            """, (url,))
+
+            result = cursor.fetchone()
+            new_version = (result['max_version'] or 0) + 1
+
+            # Mark old versions as not latest
+            if new_version > 1:
+                cursor.execute("""
+                    UPDATE crawled_pages
+                    SET is_latest = 0
+                    WHERE url = ?
+                """, (url,))
+
+            # Insert new version
+            cursor.execute("""
+                INSERT INTO crawled_pages
+                (url, country, title, content, metadata, version, is_latest)
+                VALUES (?, ?, ?, ?, ?, ?, 1)
+            """, (url, country, title, content, json.dumps(metadata), new_version))
+
+            return cursor.lastrowid
+
+    def get_latest_pages(self, country: Optional[str] = None) -> List[Dict]:
+        """Get latest version of all crawled pages"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            if country:
+                cursor.execute("""
+                    SELECT * FROM crawled_pages
+                    WHERE is_latest = 1 AND country = ?
+                    ORDER BY crawled_at DESC
+                """, (country,))
+            else:
+                cursor.execute("""
+                    SELECT * FROM crawled_pages
+                    WHERE is_latest = 1
+                    ORDER BY crawled_at DESC
+                """)
+
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_page_history(self, url: str) -> List[Dict]:
+        """Get all versions of a specific URL"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM crawled_pages
+                WHERE url = ?
+                ORDER BY version DESC
+            """, (url,))
+
+            return [dict(row) for row in cursor.fetchall()]
+
+    # ============ VISAS ============
+
+    def save_visa(self, visa_type: str, country: str, category: str,
+                  requirements: Dict, fees: Dict, processing_time: str,
+                  documents_required: List = None, timeline_stages: Dict = None,
+                  cost_breakdown: Dict = None, source_urls: List = None) -> int:
+        """Save visa with automatic versioning"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Check if visa exists
+            cursor.execute("""
+                SELECT MAX(version) as max_version
+                FROM visas
+                WHERE visa_type = ? AND country = ?
+            """, (visa_type, country))
+
+            result = cursor.fetchone()
+            new_version = (result['max_version'] or 0) + 1
+
+            # Mark old versions as not latest
+            if new_version > 1:
+                cursor.execute("""
+                    UPDATE visas
+                    SET is_latest = 0, valid_to = CURRENT_TIMESTAMP
+                    WHERE visa_type = ? AND country = ?
+                """, (visa_type, country))
+
+            # Insert new version
+            cursor.execute("""
+                INSERT INTO visas
+                (visa_type, country, category, requirements, fees, processing_time,
+                 documents_required, timeline_stages, cost_breakdown, source_urls,
+                 version, is_latest)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            """, (
+                visa_type, country, category,
+                json.dumps(requirements),
+                json.dumps(fees),
+                processing_time,
+                json.dumps(documents_required or []),
+                json.dumps(timeline_stages or {}),
+                json.dumps(cost_breakdown or {}),
+                json.dumps(source_urls or []),
+                new_version
+            ))
+
+            return cursor.lastrowid
+
+    def get_latest_visas(self, country: Optional[str] = None) -> List[Dict]:
+        """Get latest version of all visas"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            if country:
+                cursor.execute("""
+                    SELECT * FROM visas
+                    WHERE is_latest = 1 AND country = ?
+                    ORDER BY created_at DESC
+                """, (country,))
+            else:
+                cursor.execute("""
+                    SELECT * FROM visas
+                    WHERE is_latest = 1
+                    ORDER BY created_at DESC
+                """)
+
+            rows = cursor.fetchall()
+            visas = []
+            for row in rows:
+                visa = dict(row)
+                # Parse JSON fields
+                visa['requirements'] = json.loads(visa['requirements'])
+                visa['fees'] = json.loads(visa['fees'])
+                visa['documents_required'] = json.loads(visa['documents_required'])
+                visa['timeline_stages'] = json.loads(visa['timeline_stages'])
+                visa['cost_breakdown'] = json.loads(visa['cost_breakdown'])
+                visa['source_urls'] = json.loads(visa['source_urls'])
+                visas.append(visa)
+
+            return visas
+
+    def get_visa_history(self, visa_type: str, country: str) -> List[Dict]:
+        """Get all versions of a specific visa"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM visas
+                WHERE visa_type = ? AND country = ?
+                ORDER BY version DESC
+            """, (visa_type, country))
+
+            return [dict(row) for row in cursor.fetchall()]
+
+    # ============ CLIENTS ============
+
+    def save_client(self, name: str, email: str, nationality: str,
+                   profile: Dict) -> int:
+        """Save client profile"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO clients (name, email, nationality, profile)
+                VALUES (?, ?, ?, ?)
+            """, (name, email, nationality, json.dumps(profile)))
+
+            return cursor.lastrowid
+
+    def get_client(self, client_id: int) -> Optional[Dict]:
+        """Get client by ID"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM clients WHERE id = ?", (client_id,))
+            row = cursor.fetchone()
+
+            if row:
+                client = dict(row)
+                client['profile'] = json.loads(client['profile'])
+                return client
+            return None
+
+    # ============ ELIGIBILITY CHECKS ============
+
+    def save_eligibility_check(self, client_id: int, visa_id: int,
+                              visa_version: int, profile_snapshot: Dict,
+                              requirements_snapshot: Dict, score: float,
+                              eligible: bool, gaps: List, strengths: List) -> int:
+        """Save eligibility check result (audit trail)"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO eligibility_checks
+                (client_id, visa_id, visa_version, profile_snapshot,
+                 requirements_snapshot, score, eligible, gaps, strengths)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                client_id, visa_id, visa_version,
+                json.dumps(profile_snapshot),
+                json.dumps(requirements_snapshot),
+                score, eligible,
+                json.dumps(gaps),
+                json.dumps(strengths)
+            ))
+
+            return cursor.lastrowid
+
+    def get_client_checks(self, client_id: int) -> List[Dict]:
+        """Get all eligibility checks for a client"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT ec.*, v.visa_type, v.country
+                FROM eligibility_checks ec
+                JOIN visas v ON ec.visa_id = v.id
+                WHERE ec.client_id = ?
+                ORDER BY ec.check_date DESC
+            """, (client_id,))
+
+            return [dict(row) for row in cursor.fetchall()]
+
+    # ============ STATISTICS ============
+
+    def get_stats(self) -> Dict:
+        """Get database statistics"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            stats = {}
+
+            # Pages crawled
+            cursor.execute("SELECT COUNT(*) as count FROM crawled_pages WHERE is_latest = 1")
+            stats['pages_crawled'] = cursor.fetchone()['count']
+
+            # Visas
+            cursor.execute("SELECT COUNT(*) as count FROM visas WHERE is_latest = 1")
+            stats['visas_total'] = cursor.fetchone()['count']
+
+            # Countries
+            cursor.execute("SELECT COUNT(DISTINCT country) as count FROM visas WHERE is_latest = 1")
+            stats['countries'] = cursor.fetchone()['count']
+
+            # Clients
+            cursor.execute("SELECT COUNT(*) as count FROM clients")
+            stats['clients'] = cursor.fetchone()['count']
+
+            # Checks
+            cursor.execute("SELECT COUNT(*) as count FROM eligibility_checks")
+            stats['checks_performed'] = cursor.fetchone()['count']
+
+            return stats
+
+
+# Backward compatibility - keep old DataStore for migration
 class DataStore:
-    """Simple JSON-based data store for MVP"""
+    """Legacy file-based storage - kept for backward compatibility"""
 
     def __init__(self, base_path: str = "data"):
         self.base_path = Path(base_path)
         self.raw_path = self.base_path / "raw"
         self.processed_path = self.base_path / "processed"
-
-        # Create directories
         self.raw_path.mkdir(parents=True, exist_ok=True)
         self.processed_path.mkdir(parents=True, exist_ok=True)
 
-    def save_raw_page(self, country: str, page_data: dict):
-        """Save raw crawled page"""
-        country_dir = self.raw_path / country
-        country_dir.mkdir(exist_ok=True)
-
-        filename = f"{hash(page_data['url'])}.json"
-        filepath = country_dir / filename
-
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(page_data, f, indent=2, ensure_ascii=False)
-
-    def load_raw_pages(self, country: str) -> List[dict]:
-        """Load all raw pages for a country"""
-        country_dir = self.raw_path / country
-        if not country_dir.exists():
-            return []
-
-        pages = []
-        for filepath in country_dir.glob("*.json"):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                pages.append(json.load(f))
-
-        return pages
-
-    def save_structured_visas(self, visas: List[dict]):
-        """Save structured visa data"""
-        filepath = self.processed_path / "visas.json"
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(visas, f, indent=2, ensure_ascii=False)
-
     def load_structured_visas(self) -> List[dict]:
-        """Load all structured visa data"""
+        """Load visas from JSON file"""
         filepath = self.processed_path / "visas.json"
         if not filepath.exists():
             return []
-
         with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
+
+    def save_raw_page(self, country: str, page_data: dict):
+        """Save raw page to JSON file"""
+        country_dir = self.raw_path / country
+        country_dir.mkdir(exist_ok=True)
+        filename = f"{hash(page_data['url'])}.json"
+        filepath = country_dir / filename
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(page_data, f, indent=2, ensure_ascii=False)
