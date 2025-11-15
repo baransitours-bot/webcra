@@ -90,7 +90,7 @@ with tab1:
                     "Source": source
                 })
 
-            st.dataframe(data, use_container_width=True, hide_index=True)
+            st.dataframe(data, width='stretch', hide_index=True)
         else:
             # Show defaults from YAML
             st.info(f"No {category} settings in database. Using YAML defaults.")
@@ -125,26 +125,40 @@ with tab2:
         )
 
     with col2:
-        # Model options based on provider
-        if llm_provider == 'openrouter':
-            model_options = [
-                "google/gemini-2.0-flash-001:free",
-                "meta-llama/llama-3.2-3b-instruct:free",
-                "google/gemini-flash-1.5",
-            ]
+        # Model selection with custom input option
+        use_custom_model = st.checkbox("Use custom model", value=False, help="Enter a custom model name")
+
+        if use_custom_model:
+            current_model = config.get('llm.model', '')
+            llm_model = st.text_input(
+                "Custom Model Name",
+                value=current_model,
+                placeholder="e.g., google/gemini-pro, anthropic/claude-3.5-sonnet",
+                help="Enter the full model name from your provider"
+            )
         else:
-            model_options = ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"]
+            # Predefined model options
+            if llm_provider == 'openrouter':
+                model_options = [
+                    "google/gemini-2.0-flash-001:free",
+                    "meta-llama/llama-3.2-3b-instruct:free",
+                    "google/gemini-flash-1.5",
+                    "anthropic/claude-3.5-sonnet",
+                    "openai/gpt-4o-mini"
+                ]
+            else:
+                model_options = ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo", "gpt-4-turbo"]
 
-        current_model = config.get('llm.model', model_options[0])
-        if current_model not in model_options:
-            model_options.insert(0, current_model)
+            current_model = config.get('llm.model', model_options[0])
+            if current_model not in model_options:
+                model_options.insert(0, current_model)
 
-        llm_model = st.selectbox(
-            "Model",
-            options=model_options,
-            index=model_options.index(current_model) if current_model in model_options else 0,
-            help="Model to use for extraction and chat"
-        )
+            llm_model = st.selectbox(
+                "Model",
+                options=model_options,
+                index=model_options.index(current_model) if current_model in model_options else 0,
+                help="Model to use for extraction and chat"
+            )
 
         llm_max_tokens = st.number_input(
             "Max Tokens",
