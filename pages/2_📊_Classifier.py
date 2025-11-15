@@ -248,7 +248,7 @@ with tab2:
                     log_area.code('\n'.join(logs))
 
                     # Process in batches
-                    from services.classifier.extractor import VisaExtractor
+                    from services.classifier.visa_extractor import VisaExtractor
 
                     extractor = VisaExtractor(classifier_config)
                     all_visas = []

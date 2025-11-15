@@ -154,7 +154,7 @@ def test_classifier():
 
     try:
         # Check if extractor can be imported
-        from services.classifier.extractor import VisaExtractor
+        from services.classifier.visa_extractor import VisaExtractor
         print("✅ Classifier module imports successfully")
 
         # Check config
