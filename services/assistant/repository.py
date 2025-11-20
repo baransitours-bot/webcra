@@ -2,12 +2,12 @@
 Assistant Repository - FUEL TRANSPORT LAYER
 
 Handles data flow for the assistant service.
-Gets visas for Q&A, optionally saves conversations.
+Gets visas and general content for Q&A, optionally saves conversations.
 """
 
 from typing import List, Optional
 from shared.database import Database
-from shared.models import Visa
+from shared.models import Visa, GeneralContent
 
 
 class AssistantRepository:
@@ -16,6 +16,7 @@ class AssistantRepository:
 
     Responsibilities:
     - Fetch visas for context
+    - Fetch general content for context
     - Save conversations (optional)
     - Get embeddings
     """
@@ -51,6 +52,35 @@ class AssistantRepository:
     def get_visa_count(self) -> int:
         """Get total number of visas"""
         return len(self.db.get_visas())
+
+    def get_general_content(self, country: Optional[str] = None) -> List[GeneralContent]:
+        """
+        Get general immigration content for Q&A context.
+
+        Args:
+            country: Optional country filter
+
+        Returns:
+            List of GeneralContent objects
+        """
+        return self.db.get_general_content(country=country)
+
+    def get_general_content_as_dicts(self, country: Optional[str] = None) -> List[dict]:
+        """
+        Get general content as dictionaries (for backward compatibility with retrievers).
+
+        Args:
+            country: Optional country filter
+
+        Returns:
+            List of general content dictionaries
+        """
+        content_list = self.get_general_content(country)
+        return [content.to_dict() for content in content_list]
+
+    def get_general_content_count(self) -> int:
+        """Get total number of general content items"""
+        return len(self.db.get_general_content())
 
     def save_conversation(self, messages: List[dict], metadata: dict = None):
         """

@@ -50,12 +50,14 @@ with tab1:
 
     # Show readiness
     stats = validation['stats']
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Status", "✅ Ready" if validation['ready'] else "⚠️ Not Ready")
     with col2:
         st.metric("Visa Data", stats['total_visas'])
     with col3:
+        st.metric("General Content", stats.get('total_general_content', 0))
+    with col4:
         st.metric("LLM", "✅ Available" if stats['llm_available'] else "❌ Not Set")
 
     st.markdown("---")
@@ -109,7 +111,9 @@ with tab1:
                     if 'sources' in message and message['sources']:
                         with st.expander(f"📚 Sources ({len(message['sources'])})"):
                             for j, source in enumerate(message['sources'], 1):
-                                st.markdown(f"**{j}. {source.get('visa_type', 'Unknown')}** ({source.get('country', 'Unknown')})")
+                                source_type = source.get('type', 'unknown')
+                                badge = "🎫 Visa" if source_type == 'visa' else "📄 Guide"
+                                st.markdown(f"**{j}. {badge}:** {source.get('title', 'Unknown')} ({source.get('country', 'Unknown')})")
                                 if 'url' in source:
                                     st.markdown(f"   [Source]({source['url']})")
     else:
@@ -242,7 +246,11 @@ with tab2:
                 if message['role'] == 'assistant' and 'sources' in message and message['sources']:
                     markdown_content += "**Sources:**\n"
                     for j, source in enumerate(message['sources'], 1):
-                        markdown_content += f"{j}. {source.get('visa_type', 'Unknown')} ({source.get('country', 'Unknown')})\n"
+                        source_type = source.get('type', 'unknown')
+                        type_label = "Visa" if source_type == 'visa' else "Guide"
+                        markdown_content += f"{j}. [{type_label}] {source.get('title', 'Unknown')} ({source.get('country', 'Unknown')})\n"
+                        if source.get('url'):
+                            markdown_content += f"   URL: {source['url']}\n"
                     markdown_content += "\n"
 
                 markdown_content += "---\n\n"
