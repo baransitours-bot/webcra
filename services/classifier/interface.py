@@ -162,9 +162,9 @@ class ClassifierController:
                         self.service.repo.save_visa(visa)
                         visas_extracted += 1
 
-                        # Notify
+                        # Notify - pass full visa dict, not just visa_type string
                         if on_visa_found:
-                            on_visa_found(visa.visa_type)
+                            on_visa_found(visa.to_dict())
 
                 except Exception as e:
                     self.logger.error(f"Error processing page: {e}")
