@@ -376,7 +376,7 @@ def build_dual_extraction_prompt(text: str, country: str, visa_schema: Dict) -> 
     if fields.get('documents_required', {}).get('enabled'):
         visa_fields.append('- documents_required: Required documents list')
 
-    prompt = f"""Extract information from this Canadian government webpage.
+    prompt = f"""Extract information from this government immigration webpage.
 
 Country: {country}
 
@@ -385,7 +385,7 @@ Content:
 
 This page may contain:
 1. SPECIFIC VISA/PROGRAM information (visa types, requirements, fees)
-2. GENERAL VALUABLE INFORMATION (guides, FAQs, processes, benefits, services, employment, healthcare, social programs, travel, settlement)
+2. GENERAL VALUABLE INFORMATION (guides, FAQs, processes, benefits, services, employment, healthcare, social programs, travel, settlement, newcomer information)
 3. BOTH types of information
 4. NEITHER (truly irrelevant page)
 
@@ -439,9 +439,9 @@ Rules:
 4. If page has BOTH → include both objects in array
 5. If page has NEITHER (only navigation, footers, truly empty) → return empty array []
 6. For visa: extract specific immigration program details (fees, requirements, etc.)
-7. For general: extract ANY valuable government information - employment, benefits, healthcare, social programs, immigration processes, settlement info, travel info, etc.
+7. For general: extract ANY valuable government information - employment, benefits, healthcare, social programs, immigration processes, settlement info, travel info, newcomer resources, etc.
 8. Include ALL application links in general content (even if URL is not in text, include label)
-9. Be VERY inclusive - if page has useful information for someone moving to/living in Canada, extract it
+9. Be VERY inclusive - if page has useful information for someone moving to/living in {country}, extract it
 10. Default to EXTRACTING rather than skipping - when uncertain, include it
 
 Return ONLY valid JSON array, no other text."""
