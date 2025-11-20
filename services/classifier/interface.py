@@ -107,6 +107,7 @@ class ClassifierController:
     def classify_with_progress(
         self,
         country: Optional[str] = None,
+        skip_classified: bool = True,
         on_start: Optional[Callable] = None,
         on_page: Optional[Callable] = None,
         on_visa_found: Optional[Callable] = None,
@@ -118,6 +119,7 @@ class ClassifierController:
 
         Args:
             country: Optional country to classify
+            skip_classified: If True, skip pages that already have visas (default: True)
             on_start: Called when starting (total_pages)
             on_page: Called after each page (page_num, total, page_title)
             on_visa_found: Called when visa extracted (visa_type)
@@ -128,8 +130,8 @@ class ClassifierController:
             Classification results
         """
         try:
-            # Get pages
-            pages = self.service.repo.get_pages(country)
+            # Get pages (skip already classified if requested)
+            pages = self.service.repo.get_pages(country, only_unclassified=skip_classified)
 
             if not pages:
                 if on_error:

@@ -414,6 +414,50 @@ class Database:
             rows = [dict(row) for row in cursor.fetchall()]
             return load_pages_from_rows(rows)
 
+    def get_unclassified_pages(self, country: Optional[str] = None) -> List[CrawledPage]:
+        """
+        Get crawled pages that haven't been classified yet.
+
+        A page is considered "unclassified" if there's no visa in the visas table
+        with a matching source URL.
+
+        Args:
+            country: Optional country filter
+
+        Returns:
+            List of CrawledPage objects that need classification
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Query to find pages without corresponding visas
+            if country:
+                cursor.execute("""
+                    SELECT cp.* FROM crawled_pages cp
+                    WHERE cp.is_latest = 1
+                      AND cp.country = ?
+                      AND NOT EXISTS (
+                        SELECT 1 FROM visas v
+                        WHERE v.is_latest = 1
+                          AND json_extract(v.source_urls, '$[0]') = cp.url
+                      )
+                    ORDER BY cp.crawled_at DESC
+                """, (country,))
+            else:
+                cursor.execute("""
+                    SELECT cp.* FROM crawled_pages cp
+                    WHERE cp.is_latest = 1
+                      AND NOT EXISTS (
+                        SELECT 1 FROM visas v
+                        WHERE v.is_latest = 1
+                          AND json_extract(v.source_urls, '$[0]') = cp.url
+                      )
+                    ORDER BY cp.crawled_at DESC
+                """)
+
+            rows = [dict(row) for row in cursor.fetchall()]
+            return load_pages_from_rows(rows)
+
     def get_visa_history(self, visa_type: str, country: str) -> List[Dict]:
         """Get all versions of a specific visa"""
         with self.get_connection() as conn:
