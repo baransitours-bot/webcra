@@ -13,7 +13,7 @@ from urllib.parse import urljoin, urlparse
 from collections import deque
 from datetime import datetime
 import time
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Optional
 
 from shared.models import CrawledPage
 from shared.logger import setup_logger

@@ -20,8 +20,14 @@ class CrawlerRepository:
     - Check if URL already crawled
     """
 
-    def __init__(self):
-        self.db = Database()
+    def __init__(self, db_path: str = "data/immigration.db"):
+        """
+        Initialize repository.
+
+        Args:
+            db_path: Path to database file
+        """
+        self.db = Database(db_path=db_path)
 
     def save_page(self, page: CrawledPage) -> int:
         """
