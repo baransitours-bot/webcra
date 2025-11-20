@@ -3,9 +3,9 @@ Crawler Run Tab Component - Updated to use Controller
 """
 
 import streamlit as st
-import yaml
 from shared.components import ProgressDisplay, LogViewer
 from services.crawler.interface import CrawlerController
+from shared.service_config import get_service_config
 
 
 class RunTab:
@@ -61,15 +61,15 @@ class RunTab:
             logger.add_info(f"Max depth: {config['max_depth']}")
             logger.add_info(f"Request delay: {config['request_delay']}s")
 
-            # Load global config to get country URLs
-            with open('config.yaml', 'r') as f:
-                global_config = yaml.safe_load(f)
+            # Load countries from centralized config
+            config_loader = get_service_config()
+            all_countries = config_loader.get_countries()
 
             # Prepare countries to crawl
             countries_to_crawl = []
-            for country_name in config['countries']:
-                if country_name in global_config['countries']:
-                    country_info = global_config['countries'][country_name]
+            for country_code in config['countries']:
+                if country_code in all_countries:
+                    country_info = all_countries[country_code]
                     countries_to_crawl.append({
                         'name': country_info['name'],
                         'seed_urls': country_info['seed_urls']
