@@ -270,6 +270,185 @@ def get_default_schema() -> str:
     return "standard"
 
 
+# ============ GENERAL CONTENT EXTRACTION SCHEMA ============
+
+GENERAL_CONTENT_TYPES = [
+    "guide",        # How-to guides and instructions
+    "faq",          # Frequently asked questions
+    "process",      # Application or procedural steps
+    "requirements", # General document/eligibility requirements
+    "timeline",     # Time expectations and deadlines
+    "overview"      # General information or introduction
+]
+
+
+def build_general_content_prompt(text: str, country: str) -> str:
+    """
+    Build LLM extraction prompt for general immigration content.
+
+    Args:
+        text: Page content to extract from
+        country: Country name
+
+    Returns:
+        LLM prompt string for general content extraction
+    """
+    text_sample = text[:8000] if len(text) > 8000 else text
+
+    prompt = f"""Extract general immigration information from this webpage content.
+
+Country: {country}
+
+Content:
+{text_sample}
+
+This page may contain GENERAL IMMIGRATION INFORMATION (not specific visa details).
+
+Extract the following information in JSON format:
+{{
+    "content_type": "guide|faq|process|requirements|timeline|overview",
+    "title": "Descriptive title of the content",
+    "summary": "200-word summary of key information",
+    "key_points": ["List", "of", "5-10", "main", "takeaways"],
+    "content": "Full content text (cleaned)",
+    "application_links": [
+        {{"label": "Apply here", "url": "https://example.com/apply"}},
+        {{"label": "More info", "url": "https://example.com/info"}}
+    ],
+    "metadata": {{
+        "audience": "skilled_workers|students|families|general",
+        "difficulty": "beginner|intermediate|advanced",
+        "topics": ["immigration", "work_permit", "study", "pr", "citizenship"]
+    }}
+}}
+
+Content Type Definitions:
+- guide: How-to guides, step-by-step instructions
+- faq: Frequently asked questions and answers
+- process: Application procedures, process descriptions
+- requirements: General document or eligibility requirements
+- timeline: Time expectations, deadlines, processing stages
+- overview: General information, introductions, high-level summaries
+
+Rules:
+1. Extract if this contains general immigration guidance or information
+2. The "summary" should be 150-200 words covering main points
+3. The "key_points" should be 5-10 actionable takeaways
+4. Include ALL application links and important URLs in "application_links"
+5. Set "audience" based on who this content is for
+6. Set "difficulty" based on complexity level
+7. Add relevant "topics" tags from the list
+8. If NOT an immigration content page, return: {{"content_type": null}}
+
+Return ONLY valid JSON, no other text."""
+
+    return prompt
+
+
+def build_dual_extraction_prompt(text: str, country: str, visa_schema: Dict) -> str:
+    """
+    Build combined extraction prompt for BOTH visa and general content.
+    Returns array with both types if both are present.
+
+    Args:
+        text: Page content to extract from
+        country: Country name
+        visa_schema: Visa extraction schema config
+
+    Returns:
+        LLM prompt string for dual extraction
+    """
+    text_sample = text[:8000] if len(text) > 8000 else text
+
+    # Build visa fields from schema
+    visa_fields = []
+    fields = visa_schema.get('fields', {})
+    if fields.get('visa_type', {}).get('enabled'):
+        visa_fields.append('- visa_type: Name of the visa/immigration program')
+    if fields.get('category', {}).get('enabled'):
+        visa_fields.append('- category: Type (work|study|family|business|tourist|permanent|temporary)')
+    if fields.get('requirements', {}).get('enabled'):
+        visa_fields.append('- requirements: Eligibility requirements (age, education, etc.)')
+    if fields.get('fees', {}).get('enabled'):
+        visa_fields.append('- fees: All costs and fees')
+    if fields.get('processing_time', {}).get('enabled'):
+        visa_fields.append('- processing_time: How long processing takes')
+    if fields.get('documents_required', {}).get('enabled'):
+        visa_fields.append('- documents_required: Required documents list')
+
+    prompt = f"""Extract immigration information from this webpage content.
+
+Country: {country}
+
+Content:
+{text_sample}
+
+This page may contain:
+1. SPECIFIC VISA/PROGRAM information (visa types, requirements, fees)
+2. GENERAL IMMIGRATION information (guides, FAQs, processes, timelines)
+3. BOTH types of information
+4. NEITHER (irrelevant page)
+
+Extract and return as a JSON ARRAY with objects for each type found:
+
+[
+    {{
+        "type": "visa",
+        "data": {{
+            "visa_type": "Name of visa",
+            "category": "work|study|family|business|tourist|permanent|temporary",
+            "requirements": {{...}},
+            "fees": {{...}},
+            "processing_time": "...",
+            "documents_required": [...]
+        }}
+    }},
+    {{
+        "type": "general",
+        "data": {{
+            "content_type": "guide|faq|process|requirements|timeline|overview",
+            "title": "Page title",
+            "summary": "200-word summary",
+            "key_points": ["point 1", "point 2", ...],
+            "content": "Full content",
+            "application_links": [{{"label": "...", "url": "..."}}],
+            "metadata": {{
+                "audience": "skilled_workers|students|families|general",
+                "difficulty": "beginner|intermediate|advanced",
+                "topics": ["immigration", "work_permit", ...]
+            }}
+        }}
+    }}
+]
+
+Visa Fields to Extract:
+{chr(10).join(visa_fields)}
+
+General Content Types:
+- guide: How-to guides, step-by-step instructions
+- faq: Frequently asked questions
+- process: Application procedures
+- requirements: General eligibility/document requirements
+- timeline: Time expectations and deadlines
+- overview: General information and introductions
+
+Rules:
+1. Return ARRAY with 0, 1, or 2 objects depending on what's found
+2. If page has SPECIFIC VISA info → include visa object
+3. If page has GENERAL IMMIGRATION info → include general object
+4. If page has BOTH → include both objects in array
+5. If page has NEITHER → return empty array []
+6. For visa: extract specific program details (fees, requirements, etc.)
+7. For general: extract guidance, processes, FAQs (not specific visas)
+8. Include ALL application links in general content
+9. Be comprehensive - extract all valuable information
+10. If uncertain, include both types (we'll filter later)
+
+Return ONLY valid JSON array, no other text."""
+
+    return prompt
+
+
 def validate_schema(schema: Dict) -> tuple:
     """
     Validate extraction schema configuration.

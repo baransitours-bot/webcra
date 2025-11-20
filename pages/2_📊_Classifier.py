@@ -275,6 +275,7 @@ with tab2:
                 import os
                 logs = []
                 all_visas = []
+                all_general_content = []
                 # Use dict for mutable state tracking
                 state = {'total_pages': 0, 'pages_processed': 0}
 
@@ -326,7 +327,7 @@ with tab2:
 
                     def on_visa_found(visa_data):
                         all_visas.append(visa_data)
-                        logs.append(f"[SUCCESS] ✅ Extracted: {visa_data.get('visa_type', 'Unknown')}")
+                        logs.append(f"[SUCCESS] ✅ Visa: {visa_data.get('visa_type', 'Unknown')}")
                         log_area.code('\n'.join(logs[-25:]))
 
                         # Show LLM response if debug mode
@@ -336,23 +337,43 @@ with tab2:
                                 st.json(visa_data)
                                 st.markdown("---")
 
-                        status_text.text(f"Processing... ({state['pages_processed']}/{state['total_pages']} pages, {len(all_visas)} visas found)")
+                        total_extracted = len(all_visas) + len(all_general_content)
+                        status_text.text(f"Processing... ({state['pages_processed']}/{state['total_pages']} pages, {total_extracted} items found)")
+
+                    def on_general_found(content_data):
+                        all_general_content.append(content_data)
+                        logs.append(f"[SUCCESS] ✅ General: {content_data.get('title', 'Unknown')[:50]}")
+                        log_area.code('\n'.join(logs[-25:]))
+
+                        # Show LLM response if debug mode
+                        if config['show_llm_response']:
+                            with llm_response_container:
+                                st.markdown(f"**General Content {len(all_general_content)}: {content_data.get('title', 'Unknown')}**")
+                                st.json(content_data)
+                                st.markdown("---")
+
+                        total_extracted = len(all_visas) + len(all_general_content)
+                        status_text.text(f"Processing... ({state['pages_processed']}/{state['total_pages']} pages, {total_extracted} items found)")
 
                     def on_complete(result):
                         progress_bar.progress(1.0)
 
                         visas_count = result.get('visas_extracted', len(all_visas))
+                        general_count = result.get('general_content_extracted', len(all_general_content))
                         pages_count = result.get('pages_processed', state['pages_processed'])
+                        total_extracted = visas_count + general_count
 
                         logs.append(f"\n[SUCCESS] ==================== COMPLETED ====================")
                         logs.append(f"[INFO] Pages processed: {pages_count}")
                         logs.append(f"[INFO] Visas extracted: {visas_count}")
+                        logs.append(f"[INFO] General content extracted: {general_count}")
+                        logs.append(f"[INFO] Total items extracted: {total_extracted}")
                         if pages_count > 0:
-                            logs.append(f"[INFO] Success rate: {(visas_count/pages_count*100):.1f}%")
+                            logs.append(f"[INFO] Success rate: {(total_extracted/pages_count*100):.1f}%")
                         logs.append(f"[INFO] Data saved to database with versioning")
                         log_area.code('\n'.join(logs))
 
-                        status_text.text(f"✅ Completed! Processed {pages_count} pages, extracted {visas_count} visas")
+                        status_text.text(f"✅ Completed! Processed {pages_count} pages, extracted {visas_count} visas + {general_count} general content")
 
                     def on_error(error_msg):
                         logs.append(f"[ERROR] ❌ {error_msg[:100]}")
@@ -365,6 +386,7 @@ with tab2:
                         on_start=on_start,
                         on_page=on_page,
                         on_visa_found=on_visa_found,
+                        on_general_found=on_general_found,
                         on_complete=on_complete,
                         on_error=on_error
                     )
@@ -373,12 +395,15 @@ with tab2:
                     st.session_state['classifier_results'] = {
                         'pages_processed': result.get('pages_processed', state['pages_processed']),
                         'visas_extracted': result.get('visas_extracted', len(all_visas)),
+                        'general_content_extracted': result.get('general_content_extracted', len(all_general_content)),
                         'visas': all_visas,
+                        'general_content': all_general_content,
                         'status': 'completed',
                         'model_used': config['model']
                     }
 
-                    st.success(f"✅ Classification completed! Extracted {len(all_visas)} visas from {result.get('pages_processed', 0)} pages")
+                    total_extracted = len(all_visas) + len(all_general_content)
+                    st.success(f"✅ Classification completed! Extracted {total_extracted} items ({len(all_visas)} visas + {len(all_general_content)} general content) from {result.get('pages_processed', 0)} pages")
                     st.info("📊 View results in the **Results** tab →")
 
                 except Exception as e:

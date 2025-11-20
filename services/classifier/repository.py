@@ -2,12 +2,12 @@
 Classifier Repository - FUEL TRANSPORT LAYER
 
 Handles data flow for the classifier service.
-Gets crawled pages, saves extracted visas.
+Gets crawled pages, saves extracted visas and general content.
 """
 
 from typing import List, Optional
 from shared.database import Database
-from shared.models import CrawledPage, Visa
+from shared.models import CrawledPage, Visa, GeneralContent
 
 
 class ClassifierRepository:
@@ -75,3 +75,37 @@ class ClassifierRepository:
     def get_visa_count(self) -> int:
         """Get total number of visas"""
         return len(self.db.get_visas())
+
+    def save_general_content(self, content: GeneralContent) -> int:
+        """
+        Save extracted general immigration content to database.
+
+        Args:
+            content: GeneralContent model object
+
+        Returns:
+            Content ID
+        """
+        return self.db.save_general_content(
+            country=content.country,
+            title=content.title,
+            content_type=content.content_type,
+            summary=content.summary,
+            key_points=content.key_points,
+            content=content.content,
+            application_links=content.application_links,
+            source_url=content.source_url,
+            metadata=content.metadata
+        )
+
+    def get_general_content(self, country: Optional[str] = None) -> List[GeneralContent]:
+        """
+        Get all extracted general content.
+
+        Args:
+            country: Optional country filter
+
+        Returns:
+            List of GeneralContent objects
+        """
+        return self.db.get_general_content(country=country)

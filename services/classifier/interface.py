@@ -111,23 +111,26 @@ class ClassifierController:
         on_start: Optional[Callable] = None,
         on_page: Optional[Callable] = None,
         on_visa_found: Optional[Callable] = None,
+        on_general_found: Optional[Callable] = None,
         on_complete: Optional[Callable] = None,
         on_error: Optional[Callable] = None
     ) -> Dict:
         """
-        Classify with progress callbacks for UI.
+        Classify with progress callbacks for UI using dual extraction.
+        Extracts both visa-specific and general immigration content.
 
         Args:
             country: Optional country to classify
             skip_classified: If True, skip pages that already have visas (default: True)
             on_start: Called when starting (total_pages)
             on_page: Called after each page (page_num, total, page_title)
-            on_visa_found: Called when visa extracted (visa_type)
+            on_visa_found: Called when visa extracted (visa_dict)
+            on_general_found: Called when general content extracted (content_dict)
             on_complete: Called when complete (results)
             on_error: Called on error (error_message)
 
         Returns:
-            Classification results
+            Classification results with visas_extracted and general_content_extracted
         """
         try:
             # Get pages (skip already classified if requested)
@@ -139,6 +142,7 @@ class ClassifierController:
                 return {
                     'pages_processed': 0,
                     'visas_extracted': 0,
+                    'general_content_extracted': 0,
                     'errors': 0
                 }
 
@@ -146,8 +150,9 @@ class ClassifierController:
             if on_start:
                 on_start(len(pages))
 
-            # Process each page
+            # Process each page with dual extraction
             visas_extracted = 0
+            general_content_extracted = 0
             errors = 0
 
             for i, page in enumerate(pages, 1):
@@ -156,17 +161,26 @@ class ClassifierController:
                     if on_page:
                         on_page(i, len(pages), page.title)
 
-                    # Extract visa
-                    visa = self.service.engine.extract_visa_from_page(page)
+                    # Extract BOTH visa and general content
+                    visa, general_content = self.service.engine.extract_from_page(page)
 
                     if visa:
-                        # Save
+                        # Save visa
                         self.service.repo.save_visa(visa)
                         visas_extracted += 1
 
-                        # Notify - pass full visa dict, not just visa_type string
+                        # Notify
                         if on_visa_found:
                             on_visa_found(visa.to_dict())
+
+                    if general_content:
+                        # Save general content
+                        self.service.repo.save_general_content(general_content)
+                        general_content_extracted += 1
+
+                        # Notify
+                        if on_general_found:
+                            on_general_found(general_content.to_dict())
 
                 except Exception as e:
                     self.logger.error(f"Error processing page: {e}")
@@ -178,6 +192,7 @@ class ClassifierController:
             results = {
                 'pages_processed': len(pages),
                 'visas_extracted': visas_extracted,
+                'general_content_extracted': general_content_extracted,
                 'errors': errors
             }
 
