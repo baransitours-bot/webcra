@@ -202,9 +202,12 @@ class ConfigManager:
         try:
             # Load cache if needed
             if service not in self._yaml_cache:
-                yaml_path = Path(f"services/{service}/config.yaml")
-                if not yaml_path.exists():
+                if service == 'global':
                     yaml_path = Path("config.yaml")
+                else:
+                    yaml_path = Path(f"services/{service}/config.yaml")
+                    if not yaml_path.exists():
+                        yaml_path = Path("config.yaml")
 
                 if yaml_path.exists():
                     with open(yaml_path, 'r') as f:
@@ -271,6 +274,272 @@ class ConfigManager:
             'max_pages': self.get('crawler.max_pages', 50),
             'max_depth': self.get('crawler.max_depth', 3)
         }
+
+    # === Country Management ===
+
+    def get_countries(self) -> Dict[str, Dict]:
+        """
+        Get all country configurations
+
+        Returns:
+            Dict of country configs with country code as key
+        """
+        # Try database first
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT value FROM settings
+                WHERE key = 'countries' AND type = 'json'
+            """)
+
+            row = cursor.fetchone()
+            conn.close()
+
+            if row:
+                import json
+                return json.loads(row['value'])
+
+        except Exception:
+            pass
+
+        # Fallback to YAML
+        return self._get_from_yaml('global', 'countries') or {}
+
+    def set_countries(self, countries: Dict[str, Dict]) -> bool:
+        """
+        Save country configurations to database
+
+        Args:
+            countries: Dict of country configs
+
+        Returns:
+            True if successful
+        """
+        try:
+            import json
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT OR REPLACE INTO settings (key, value, type, updated_at)
+                VALUES ('countries', ?, 'json', CURRENT_TIMESTAMP)
+            """, (json.dumps(countries),))
+
+            conn.commit()
+            conn.close()
+
+            self._db_cache = None
+            return True
+
+        except Exception as e:
+            print(f"Error saving countries: {e}")
+            return False
+
+    def add_country(self, code: str, name: str, base_url: str, seed_urls: list) -> bool:
+        """
+        Add or update a country configuration
+
+        Args:
+            code: Country code (e.g., 'ca', 'uk')
+            name: Country name
+            base_url: Base URL for the country site
+            seed_urls: List of seed URLs to start crawling
+
+        Returns:
+            True if successful
+        """
+        countries = self.get_countries()
+
+        countries[code] = {
+            'name': name,
+            'code': code.upper(),
+            'base_url': base_url,
+            'seed_urls': seed_urls
+        }
+
+        return self.set_countries(countries)
+
+    def remove_country(self, code: str) -> bool:
+        """Remove a country configuration"""
+        countries = self.get_countries()
+
+        if code in countries:
+            del countries[code]
+            return self.set_countries(countries)
+
+        return False
+
+    # === List Config Management ===
+
+    def get_list_config(self, key: str, default: list = None) -> list:
+        """
+        Get a list configuration (e.g., keywords, visa_categories)
+
+        Args:
+            key: Config key (e.g., 'keywords', 'visa_categories')
+            default: Default value
+
+        Returns:
+            List configuration
+        """
+        # Try database first
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT value FROM settings
+                WHERE key = ? AND type = 'json'
+            """, (key,))
+
+            row = cursor.fetchone()
+            conn.close()
+
+            if row:
+                import json
+                return json.loads(row['value'])
+
+        except Exception:
+            pass
+
+        # Fallback to YAML
+        yaml_value = self._get_from_yaml('global', key)
+        if yaml_value is not None:
+            return yaml_value
+
+        return default or []
+
+    def set_list_config(self, key: str, value: list) -> bool:
+        """
+        Save a list configuration to database
+
+        Args:
+            key: Config key
+            value: List value
+
+        Returns:
+            True if successful
+        """
+        try:
+            import json
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT OR REPLACE INTO settings (key, value, type, updated_at)
+                VALUES (?, ?, 'json', CURRENT_TIMESTAMP)
+            """, (key, json.dumps(value)))
+
+            conn.commit()
+            conn.close()
+
+            self._db_cache = None
+            return True
+
+        except Exception as e:
+            print(f"Error saving list config: {e}")
+            return False
+
+    # === Dict Config Management ===
+
+    def get_dict_config(self, key: str, service: str = 'global', default: dict = None) -> dict:
+        """
+        Get a dict configuration (e.g., patterns, visa_type_keywords)
+
+        Args:
+            key: Config key
+            service: Service name for YAML lookup
+            default: Default value
+
+        Returns:
+            Dict configuration
+        """
+        # Try database first
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT value FROM settings
+                WHERE key = ? AND type = 'json'
+            """, (key,))
+
+            row = cursor.fetchone()
+            conn.close()
+
+            if row:
+                import json
+                return json.loads(row['value'])
+
+        except Exception:
+            pass
+
+        # Fallback to YAML
+        yaml_value = self._get_from_yaml(service, key)
+        if yaml_value is not None:
+            return yaml_value
+
+        return default or {}
+
+    def set_dict_config(self, key: str, value: dict) -> bool:
+        """
+        Save a dict configuration to database
+
+        Args:
+            key: Config key
+            value: Dict value
+
+        Returns:
+            True if successful
+        """
+        try:
+            import json
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT OR REPLACE INTO settings (key, value, type, updated_at)
+                VALUES (?, ?, 'json', CURRENT_TIMESTAMP)
+            """, (key, json.dumps(value)))
+
+            conn.commit()
+            conn.close()
+
+            self._db_cache = None
+            return True
+
+        except Exception as e:
+            print(f"Error saving dict config: {e}")
+            return False
+
+    def reset_to_defaults(self) -> bool:
+        """
+        Clear all database settings to reset to YAML defaults
+
+        Returns:
+            True if successful
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("DELETE FROM settings")
+
+            conn.commit()
+            conn.close()
+
+            self._db_cache = None
+            self._yaml_cache = {}
+            return True
+
+        except Exception as e:
+            print(f"Error resetting config: {e}")
+            return False
 
 
 # Global instance

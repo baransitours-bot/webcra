@@ -3,7 +3,12 @@ Crawler Configuration Tab Component
 """
 
 import streamlit as st
-import yaml
+import sys
+from pathlib import Path
+
+# Add parent directory to path to import shared modules
+sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+from shared.config_manager import get_config
 
 class ConfigTab:
     """Handles crawler configuration UI"""
@@ -13,11 +18,12 @@ class ConfigTab:
         """Render configuration tab and return config dict"""
         st.subheader("⚙️ Crawler Configuration")
 
-        # Load global config for countries
-        with open('config.yaml', 'r') as f:
-            global_config = yaml.safe_load(f)
+        # Get config manager
+        config_mgr = get_config()
 
-        available_countries = list(global_config.get('countries', {}).keys())
+        # Load countries from config manager (DB > YAML)
+        countries_data = config_mgr.get_countries()
+        available_countries = list(countries_data.keys())
 
         # Config mode selection
         config_mode = st.radio(
@@ -39,27 +45,38 @@ class ConfigTab:
     @staticmethod
     def _render_default_config(available_countries):
         """Render default configuration"""
-        st.info("""
-        **Default Settings:**
-        - Max Pages: 50 per country
-        - Max Depth: 3 levels
-        - Delay: 2 seconds between requests
+        # Get config manager for defaults
+        config_mgr = get_config()
+
+        max_pages_default = config_mgr.get('crawler.max_pages', 50)
+        max_depth_default = config_mgr.get('crawler.max_depth', 3)
+        delay_default = config_mgr.get('crawler.delay', 2.0)
+
+        st.info(f"""
+        **Default Settings (from Global Config):**
+        - Max Pages: {max_pages_default} per country
+        - Max Depth: {max_depth_default} levels
+        - Delay: {delay_default} seconds between requests
         - Saves to database with versioning
         """)
 
         # Just select countries
+        default_country = ['canada'] if 'canada' in available_countries else (
+            [available_countries[0]] if available_countries else []
+        )
+
         countries = st.multiselect(
             "Select Countries to Crawl",
             available_countries,
-            default=['canada'],
+            default=default_country,
             help="Choose which countries to crawl"
         )
 
         return {
             'countries': countries,
-            'max_pages': 50,
-            'max_depth': 3,
-            'request_delay': 2.0,
+            'max_pages': max_pages_default,
+            'max_depth': max_depth_default,
+            'request_delay': delay_default,
             'mode': 'default'
         }
 

@@ -1,12 +1,19 @@
 """
 Global Configuration Manager
 Manage countries, seed URLs, keywords, and system settings
+
+Uses ConfigManager for centralized configuration with priority:
+.env > Database > YAML defaults
 """
 
 import streamlit as st
 import yaml
 from pathlib import Path
 import json
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+
+from shared.config_manager import get_config
 
 st.set_page_config(
     page_title="Global Config",
@@ -15,39 +22,35 @@ st.set_page_config(
 )
 
 st.title("🌐 Global Configuration")
-st.markdown("Manage countries, seed URLs, keywords, and system settings")
+st.markdown("""
+**Centralized Configuration Management**
+- Changes are saved to database
+- Database overrides YAML defaults
+- Reset button restores YAML defaults
+""")
 
-# Load global config
-config_path = Path('config.yaml')
-
-def load_config():
-    with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
-
-def save_config(config_data):
-    with open(config_path, 'w') as f:
-        yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
-
-config = load_config()
+# Get config manager
+config_mgr = get_config()
 
 # Tabs
-tabs = st.tabs(["🌍 Countries", "🔑 Keywords", "📁 Paths", "💾 Save"])
+tabs = st.tabs(["🌍 Countries", "🔑 Keywords", "🏷️ Visa Categories", "⚙️ System", "🔄 Reset"])
 
 # ============ TAB 1: Countries ============
 with tabs[0]:
     st.markdown("### Manage Countries")
+    st.info("Configure countries for crawling. Changes are saved to database and override YAML defaults.")
 
     # Add new country
     with st.expander("➕ Add New Country", expanded=False):
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            new_country_key = st.text_input("Country Key (lowercase)", placeholder="japan")
-            new_country_name = st.text_input("Country Name", placeholder="Japan")
+            new_country_key = st.text_input("Country Key (lowercase)", placeholder="japan", key="new_key")
+            new_country_name = st.text_input("Country Name", placeholder="Japan", key="new_name")
 
         with col2:
-            new_country_code = st.text_input("Country Code", placeholder="JP")
-            new_base_url = st.text_input("Base URL", placeholder="https://www.mofa.go.jp")
+            new_country_code = st.text_input("Country Code", placeholder="JP", key="new_code")
+            new_base_url = st.text_input("Base URL", placeholder="https://www.mofa.go.jp", key="new_base")
 
         with col3:
             st.markdown("**Seed URLs** (one per line)")
@@ -55,98 +58,111 @@ with tabs[0]:
                 "Seed URLs",
                 placeholder="https://www.mofa.go.jp/j_info/visit/visa/\nhttps://...",
                 height=100,
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                key="new_seeds"
             )
 
         if st.button("➕ Add Country", type="primary"):
             if new_country_key and new_country_name:
                 seed_urls_list = [url.strip() for url in new_seed_urls.split('\n') if url.strip()]
 
-                config['countries'][new_country_key] = {
-                    'name': new_country_name,
-                    'code': new_country_code,
-                    'base_url': new_base_url,
-                    'seed_urls': seed_urls_list
-                }
+                success = config_mgr.add_country(
+                    code=new_country_key,
+                    name=new_country_name,
+                    base_url=new_base_url,
+                    seed_urls=seed_urls_list
+                )
 
-                save_config(config)
-                st.success(f"✅ Added {new_country_name}")
-                st.rerun()
+                if success:
+                    st.success(f"✅ Added {new_country_name}")
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to add country")
             else:
                 st.error("Country key and name are required")
 
     st.markdown("---")
     st.markdown("### Current Countries")
 
-    # Display existing countries
-    for country_key, country_data in config.get('countries', {}).items():
-        with st.expander(f"🌍 {country_data.get('name', country_key)} ({country_key})", expanded=False):
-            col1, col2 = st.columns([3, 1])
+    # Get current countries
+    countries = config_mgr.get_countries()
 
-            with col1:
-                # Editable fields
-                name = st.text_input(
-                    "Name",
-                    value=country_data.get('name', ''),
-                    key=f"name_{country_key}"
-                )
+    if not countries:
+        st.warning("No countries configured. Add one above to get started.")
+    else:
+        # Display existing countries
+        for country_key, country_data in countries.items():
+            with st.expander(f"🌍 {country_data.get('name', country_key)} ({country_key})", expanded=False):
+                col1, col2 = st.columns([3, 1])
 
-                code = st.text_input(
-                    "Code",
-                    value=country_data.get('code', ''),
-                    key=f"code_{country_key}"
-                )
+                with col1:
+                    # Editable fields
+                    name = st.text_input(
+                        "Name",
+                        value=country_data.get('name', ''),
+                        key=f"name_{country_key}"
+                    )
 
-                base_url = st.text_input(
-                    "Base URL",
-                    value=country_data.get('base_url', ''),
-                    key=f"base_{country_key}"
-                )
+                    code = st.text_input(
+                        "Code",
+                        value=country_data.get('code', ''),
+                        key=f"code_{country_key}"
+                    )
 
-                # Seed URLs
-                current_seeds = '\n'.join(country_data.get('seed_urls', []))
-                seed_urls = st.text_area(
-                    "Seed URLs (one per line)",
-                    value=current_seeds,
-                    height=100,
-                    key=f"seeds_{country_key}"
-                )
+                    base_url = st.text_input(
+                        "Base URL",
+                        value=country_data.get('base_url', ''),
+                        key=f"base_{country_key}"
+                    )
 
-                # Update button
-                if st.button(f"💾 Save Changes", key=f"save_{country_key}"):
-                    seed_urls_list = [url.strip() for url in seed_urls.split('\n') if url.strip()]
+                    # Seed URLs
+                    current_seeds = '\n'.join(country_data.get('seed_urls', []))
+                    seed_urls = st.text_area(
+                        "Seed URLs (one per line)",
+                        value=current_seeds,
+                        height=100,
+                        key=f"seeds_{country_key}"
+                    )
 
-                    config['countries'][country_key] = {
-                        'name': name,
-                        'code': code,
-                        'base_url': base_url,
-                        'seed_urls': seed_urls_list
-                    }
+                    # Update button
+                    if st.button(f"💾 Save Changes", key=f"save_{country_key}"):
+                        seed_urls_list = [url.strip() for url in seed_urls.split('\n') if url.strip()]
 
-                    save_config(config)
-                    st.success(f"✅ Updated {name}")
-                    st.rerun()
+                        success = config_mgr.add_country(
+                            code=country_key,
+                            name=name,
+                            base_url=base_url,
+                            seed_urls=seed_urls_list
+                        )
 
-            with col2:
-                st.markdown("**Actions**")
+                        if success:
+                            st.success(f"✅ Updated {name}")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to update country")
 
-                # Delete button
-                if st.button(f"🗑️ Delete", key=f"del_{country_key}", type="secondary"):
-                    del config['countries'][country_key]
-                    save_config(config)
-                    st.success(f"Deleted {country_key}")
-                    st.rerun()
+                with col2:
+                    st.markdown("**Actions**")
 
-                # Stats
-                st.metric("Seed URLs", len(country_data.get('seed_urls', [])))
+                    # Delete button
+                    if st.button(f"🗑️ Delete", key=f"del_{country_key}", type="secondary"):
+                        success = config_mgr.remove_country(country_key)
+                        if success:
+                            st.success(f"Deleted {country_key}")
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete")
+
+                    # Stats
+                    st.metric("Seed URLs", len(country_data.get('seed_urls', [])))
 
 # ============ TAB 2: Keywords ============
 with tabs[1]:
     st.markdown("### Manage Keywords")
-    st.info("Keywords used for filtering relevant pages during crawling")
+    st.info("Keywords used for filtering relevant pages during crawling. Saved to database.")
 
     # Current keywords
-    current_keywords = config.get('keywords', [])
+    current_keywords = config_mgr.get_list_config('keywords', [])
 
     # Edit keywords
     keywords_text = st.text_area(
@@ -158,10 +174,13 @@ with tabs[1]:
 
     if st.button("💾 Save Keywords", type="primary"):
         keywords_list = [kw.strip() for kw in keywords_text.split('\n') if kw.strip()]
-        config['keywords'] = keywords_list
-        save_config(config)
-        st.success(f"✅ Saved {len(keywords_list)} keywords")
-        st.rerun()
+        success = config_mgr.set_list_config('keywords', keywords_list)
+
+        if success:
+            st.success(f"✅ Saved {len(keywords_list)} keywords")
+            st.rerun()
+        else:
+            st.error("❌ Failed to save keywords")
 
     st.markdown("---")
     st.markdown("### Suggested Keywords")
@@ -178,116 +197,210 @@ with tabs[1]:
         with cols[i % 4]:
             if st.button(f"➕ {kw}", key=f"add_kw_{i}"):
                 if kw not in current_keywords:
-                    config['keywords'].append(kw)
-                    save_config(config)
+                    current_keywords.append(kw)
+                    config_mgr.set_list_config('keywords', current_keywords)
                     st.rerun()
 
-# ============ TAB 3: Paths ============
+# ============ TAB 3: Visa Categories ============
 with tabs[2]:
-    st.markdown("### Storage Paths")
+    st.markdown("### Manage Visa Categories")
+    st.info("Categories used by the classifier to categorize visas. Saved to database.")
 
-    storage = config.get('storage', {})
+    # Current categories
+    current_categories = config_mgr.get_list_config('visa_categories', [])
 
-    raw_path = st.text_input(
-        "Raw Data Path",
-        value=storage.get('raw_data_path', 'data/raw'),
-        help="Where to store raw crawled pages"
+    # Edit categories
+    categories_text = st.text_area(
+        "Visa Categories (one per line)",
+        value='\n'.join(current_categories),
+        height=200,
+        help="Add visa categories for classification"
     )
 
-    processed_path = st.text_input(
-        "Processed Data Path",
-        value=storage.get('processed_data_path', 'data/processed'),
-        help="Where to store processed/classified data"
-    )
+    if st.button("💾 Save Categories", type="primary"):
+        categories_list = [cat.strip() for cat in categories_text.split('\n') if cat.strip()]
+        success = config_mgr.set_list_config('visa_categories', categories_list)
 
-    db_path = st.text_input(
-        "Database Path",
-        value=storage.get('database_path', 'data/database'),
-        help="Where to store database files"
-    )
-
-    if st.button("💾 Save Paths", type="primary"):
-        config['storage'] = {
-            'raw_data_path': raw_path,
-            'processed_data_path': processed_path,
-            'database_path': db_path
-        }
-        save_config(config)
-        st.success("✅ Paths updated")
-        st.rerun()
+        if success:
+            st.success(f"✅ Saved {len(categories_list)} categories")
+            st.rerun()
+        else:
+            st.error("❌ Failed to save categories")
 
     st.markdown("---")
-    st.markdown("### Project Info")
+    st.markdown("### Category Keywords")
+    st.info("Configure keywords for each visa category to improve classification accuracy.")
 
-    project = config.get('project', {})
+    # Get current keyword mappings
+    visa_keywords = config_mgr.get_dict_config('visa_type_keywords', 'classifier', {})
 
-    project_name = st.text_input(
-        "Project Name",
-        value=project.get('name', 'Immigration Platform')
-    )
+    # Allow editing for each category
+    for category in current_categories:
+        with st.expander(f"🏷️ {category.title()}", expanded=False):
+            current_kw = visa_keywords.get(category, [])
+            kw_text = st.text_area(
+                f"Keywords for {category} (one per line)",
+                value='\n'.join(current_kw) if current_kw else '',
+                height=150,
+                key=f"cat_kw_{category}"
+            )
 
-    project_version = st.text_input(
-        "Version",
-        value=project.get('version', '0.1.0')
-    )
+            if st.button(f"💾 Save {category} keywords", key=f"save_cat_{category}"):
+                kw_list = [k.strip() for k in kw_text.split('\n') if k.strip()]
+                visa_keywords[category] = kw_list
+                success = config_mgr.set_dict_config('visa_type_keywords', visa_keywords)
 
-    if st.button("💾 Save Project Info", type="primary"):
-        config['project'] = {
-            'name': project_name,
-            'version': project_version
-        }
-        save_config(config)
-        st.success("✅ Project info updated")
-        st.rerun()
+                if success:
+                    st.success(f"✅ Updated {category} keywords")
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to update keywords")
 
-# ============ TAB 4: Save/Export ============
+# ============ TAB 4: System Settings ============
 with tabs[3]:
-    st.markdown("### Current Configuration")
+    st.markdown("### System Settings")
 
-    st.code(yaml.dump(config, default_flow_style=False, sort_keys=False), language='yaml')
+    col1, col2 = st.columns(2)
 
-    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("#### Crawler Settings")
+
+        delay = st.number_input(
+            "Delay between requests (seconds)",
+            min_value=0.5,
+            max_value=10.0,
+            value=config_mgr.get('crawler.delay', 2.0),
+            step=0.5,
+            help="Rate limiting delay"
+        )
+
+        max_pages = st.number_input(
+            "Max pages per country",
+            min_value=10,
+            max_value=1000,
+            value=config_mgr.get('crawler.max_pages', 50),
+            step=10
+        )
+
+        max_depth = st.slider(
+            "Max crawl depth",
+            min_value=1,
+            max_value=5,
+            value=config_mgr.get('crawler.max_depth', 3),
+            help="How deep to follow links"
+        )
+
+        if st.button("💾 Save Crawler Settings", type="primary"):
+            config_mgr.set('crawler.delay', delay)
+            config_mgr.set('crawler.max_pages', max_pages)
+            config_mgr.set('crawler.max_depth', max_depth)
+            st.success("✅ Crawler settings saved")
+            st.rerun()
+
+    with col2:
+        st.markdown("#### LLM Settings")
+
+        provider = st.selectbox(
+            "LLM Provider",
+            ["openrouter", "openai"],
+            index=0 if config_mgr.get('llm.provider', 'openrouter') == 'openrouter' else 1
+        )
+
+        model = st.text_input(
+            "Model",
+            value=config_mgr.get('llm.model', 'google/gemini-2.0-flash-001:free'),
+            help="Model identifier"
+        )
+
+        temperature = st.slider(
+            "Temperature",
+            min_value=0.0,
+            max_value=1.0,
+            value=config_mgr.get('llm.temperature', 0.3),
+            step=0.1
+        )
+
+        max_tokens = st.number_input(
+            "Max tokens",
+            min_value=100,
+            max_value=8000,
+            value=config_mgr.get('llm.max_tokens', 2000),
+            step=100
+        )
+
+        if st.button("💾 Save LLM Settings", type="primary"):
+            config_mgr.set('llm.provider', provider)
+            config_mgr.set('llm.model', model)
+            config_mgr.set('llm.temperature', temperature)
+            config_mgr.set('llm.max_tokens', max_tokens)
+            st.success("✅ LLM settings saved")
+            st.rerun()
+
+    st.markdown("---")
+    st.markdown("### Current Configuration (Database + YAML)")
+
+    # Show effective config
+    effective_config = {
+        'countries': config_mgr.get_countries(),
+        'keywords': config_mgr.get_list_config('keywords'),
+        'visa_categories': config_mgr.get_list_config('visa_categories'),
+        'crawler': {
+            'delay': config_mgr.get('crawler.delay', 2.0),
+            'max_pages': config_mgr.get('crawler.max_pages', 50),
+            'max_depth': config_mgr.get('crawler.max_depth', 3)
+        },
+        'llm': config_mgr.get_llm_config()
+    }
+
+    st.code(yaml.dump(effective_config, default_flow_style=False, sort_keys=False), language='yaml')
+
+    col1, col2 = st.columns(2)
 
     with col1:
         st.download_button(
-            "📥 Download YAML",
-            data=yaml.dump(config, default_flow_style=False, sort_keys=False),
-            file_name="config.yaml",
+            "📥 Download Current Config",
+            data=yaml.dump(effective_config, default_flow_style=False, sort_keys=False),
+            file_name="current_config.yaml",
             mime="text/yaml"
         )
 
     with col2:
         st.download_button(
-            "📥 Download JSON",
-            data=json.dumps(config, indent=2),
-            file_name="config.json",
+            "📥 Download as JSON",
+            data=json.dumps(effective_config, indent=2),
+            file_name="current_config.json",
             mime="application/json"
         )
 
-    with col3:
-        if st.button("🔄 Reload from File"):
-            config = load_config()
-            st.success("✅ Reloaded")
-            st.rerun()
+# ============ TAB 5: Reset ============
+with tabs[4]:
+    st.markdown("### Reset Configuration")
 
-    st.markdown("---")
-    st.markdown("### Import Configuration")
+    st.warning("""
+    **⚠️ Warning: This will reset ALL database settings to YAML defaults**
 
-    uploaded_file = st.file_uploader("Upload config.yaml", type=['yaml', 'yml'])
+    This action will:
+    - Delete all custom countries from database
+    - Delete all custom keywords from database
+    - Delete all custom visa categories from database
+    - Delete all system settings from database
+    - Revert to YAML file defaults
 
-    if uploaded_file:
-        try:
-            new_config = yaml.safe_load(uploaded_file)
+    YAML files will NOT be modified.
+    """)
 
-            st.success("✅ File loaded successfully")
-            st.json(new_config)
+    col1, col2, col3 = st.columns([1, 1, 1])
 
-            if st.button("💾 Apply This Configuration", type="primary"):
-                save_config(new_config)
-                st.success("✅ Configuration updated!")
+    with col2:
+        if st.button("🔄 Reset to YAML Defaults", type="secondary"):
+            success = config_mgr.reset_to_defaults()
+
+            if success:
+                st.success("✅ Configuration reset to YAML defaults!")
+                st.balloons()
                 st.rerun()
-        except Exception as e:
-            st.error(f"❌ Error loading file: {str(e)}")
+            else:
+                st.error("❌ Failed to reset configuration")
 
 st.markdown("---")
 
@@ -296,15 +409,19 @@ st.markdown("### 📊 Quick Stats")
 
 col1, col2, col3, col4 = st.columns(4)
 
+countries = config_mgr.get_countries()
+keywords = config_mgr.get_list_config('keywords')
+visa_cats = config_mgr.get_list_config('visa_categories')
+
 with col1:
-    st.metric("Countries", len(config.get('countries', {})))
+    st.metric("Countries", len(countries))
 
 with col2:
-    total_seeds = sum(len(c.get('seed_urls', [])) for c in config.get('countries', {}).values())
+    total_seeds = sum(len(c.get('seed_urls', [])) for c in countries.values())
     st.metric("Total Seed URLs", total_seeds)
 
 with col3:
-    st.metric("Keywords", len(config.get('keywords', [])))
+    st.metric("Keywords", len(keywords))
 
 with col4:
-    st.metric("Version", config.get('project', {}).get('version', 'N/A'))
+    st.metric("Visa Categories", len(visa_cats))
