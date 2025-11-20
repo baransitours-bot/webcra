@@ -298,8 +298,10 @@ with tab2:
                     country_filter = config['countries_filter'][0] if config['countries_filter'] else None
 
                     # Define callbacks
-                    def on_start():
+                    def on_start(total):
+                        state['total_pages'] = total
                         logs.append(f"[INFO] Classification started...")
+                        logs.append(f"[INFO] Found {total} pages to process")
                         log_area.code('\n'.join(logs))
 
                     def on_page(current, total, page_title):
