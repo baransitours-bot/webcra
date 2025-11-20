@@ -12,10 +12,16 @@ import json
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from shared.service_config import get_service_config
+
 st.set_page_config(page_title="Classifier Service", page_icon="📊", layout="wide")
 
 st.title("📊 Classifier Service")
 st.markdown("Extract structured visa data from crawled pages using LLM")
+
+# Load defaults from Global Config
+config_loader = get_service_config()
+global_llm_config = config_loader.get_classifier_config()['llm']
 
 st.markdown("---")
 
@@ -25,15 +31,29 @@ tab1, tab2, tab3 = st.tabs(["⚙️ Configuration", "▶️ Run", "📊 Results"
 with tab1:
     st.subheader("⚙️ LLM Configuration")
 
+    # Show global config defaults
+    st.info(f"""
+    **Global Config Defaults:**
+    - Provider: {global_llm_config.get('provider', 'openrouter').upper()}
+    - Model: {global_llm_config.get('model', 'google/gemini-2.0-flash-001:free')}
+
+    You can override these settings below, or use them as-is.
+    To change defaults permanently, go to 🌐 Global Config page.
+    """)
+
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        # Provider
+        # Provider - default from Global Config
+        default_provider = global_llm_config.get('provider', 'openrouter')
+        provider_options = ["openrouter", "openai"]
+        provider_index = provider_options.index(default_provider) if default_provider in provider_options else 0
+
         llm_provider = st.selectbox(
             "LLM Provider",
-            ["openrouter", "openai"],
-            index=0,
-            help="OpenRouter offers FREE models"
+            provider_options,
+            index=provider_index,
+            help="OpenRouter offers FREE models. Default from Global Config."
         )
 
         # Custom model checkbox
@@ -45,12 +65,13 @@ with tab1:
 
     with col2:
         if use_custom_model:
-            # Custom model input
+            # Custom model input - default from Global Config
+            default_model = global_llm_config.get('model', 'google/gemini-2.0-flash-001:free')
             model = st.text_input(
                 "Custom Model Name",
-                value="",
+                value=default_model,
                 placeholder="e.g., google/gemini-pro, anthropic/claude-3.5-sonnet",
-                help="Enter the FULL model name from your provider"
+                help="Enter the FULL model name from your provider. Default from Global Config."
             )
 
             st.info(f"""
@@ -64,13 +85,17 @@ with tab1:
             """)
         else:
             # Predefined models
+            default_model = global_llm_config.get('model', 'google/gemini-2.0-flash-001:free')
+
             if llm_provider == "openrouter":
                 model_options = [
                     "google/gemini-2.0-flash-001:free",
                     "meta-llama/llama-3.2-3b-instruct:free",
                     "anthropic/claude-3.5-sonnet",
                     "google/gemini-pro",
-                    "openai/gpt-4o-mini"
+                    "openai/gpt-4o-mini",
+                    "x-ai/grok-2-1212",
+                    "x-ai/grok-vision-beta"
                 ]
             else:
                 model_options = [
@@ -80,11 +105,19 @@ with tab1:
                     "gpt-3.5-turbo"
                 ]
 
+            # Find default model index
+            try:
+                default_index = model_options.index(default_model)
+            except ValueError:
+                # If global config model not in list, add it and select it
+                model_options.insert(0, default_model)
+                default_index = 0
+
             model = st.selectbox(
                 "Model",
                 model_options,
-                index=0,
-                help="Select a predefined model"
+                index=default_index,
+                help="Select a predefined model. Default from Global Config."
             )
 
     st.markdown("---")
