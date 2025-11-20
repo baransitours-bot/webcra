@@ -79,7 +79,7 @@ with col1:
     - Visa requirements
     - Fee information
 
-    **Status:** ⏳ Coming soon
+    **Status:** ✅ Ready
     """)
 
 with col2:
@@ -90,7 +90,7 @@ with col2:
     - Gap analysis
     - Recommendations
 
-    **Status:** ⏳ Coming soon
+    **Status:** ✅ Ready
     """)
 
     st.markdown("""
@@ -100,7 +100,7 @@ with col2:
     - Context-aware answers
     - Profile-based queries
 
-    **Status:** ⏳ Coming soon
+    **Status:** ✅ Ready
     """)
 
 st.markdown("---")
@@ -119,9 +119,32 @@ st.markdown("""
 
 st.markdown("---")
 
+# Database statistics
+st.subheader("📊 Database Status")
+
+db = Database()
+stats = db.get_stats()
+
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.metric("Pages Crawled", stats['pages_crawled'])
+with col2:
+    st.metric("Visas", stats['visas_total'])
+with col3:
+    st.metric("Countries", stats['countries'])
+with col4:
+    st.metric("Clients", stats['clients'])
+
+if stats['visas_total'] > 0:
+    st.success(f"✅ Database has {stats['visas_total']} visas from {stats['countries']} countries - ready to use!")
+else:
+    st.warning("⚠️ Database is empty. Use 🕷️ Crawler Service to collect data, then Classifier to structure it.")
+
+st.markdown("---")
+
 # System info
 st.info("""
 **📖 Documentation:** See `SYSTEM.md` for complete system overview
 
-**🔧 Current Data:** `data/processed/visas.json` (13 visas from USA, TestCountry)
+**💾 Data Storage:** SQLite database at `data/immigration.db`
 """)
