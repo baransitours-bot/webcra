@@ -141,10 +141,13 @@ with tab1:
                 help="Display raw LLM output for debugging"
             )
 
+            # Get current value from session state if exists
+            current_skip = st.session_state.get('classifier_config', {}).get('skip_classified', True)
             skip_classified = st.checkbox(
                 "Skip Already Classified Pages",
-                value=True,
-                help="Only process pages without visas (saves time & LLM costs). Uncheck to re-classify all pages."
+                value=current_skip,
+                help="Only process pages without visas (saves time & LLM costs). Uncheck to re-classify all pages.",
+                key="skip_classified_checkbox"
             )
 
         with col2:
@@ -166,7 +169,10 @@ with tab1:
         placeholder="sk-... (optional if already in .env)"
     )
 
-    # Save config to session
+    # Save button
+    st.markdown("---")
+
+    # Auto-save config to session (happens on every change)
     st.session_state['classifier_config'] = {
         'llm_provider': llm_provider,
         'model': model,
@@ -177,7 +183,13 @@ with tab1:
         'skip_classified': skip_classified
     }
 
-    st.success("✅ Configuration saved to session")
+    # Show current configuration status
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.success("✅ Configuration auto-saved")
+    with col2:
+        skip_status = "Skip classified" if skip_classified else "Re-classify ALL"
+        st.info(f"Mode: **{skip_status}** | Model: **{model.split('/')[-1][:25]}**")
 
 with tab2:
     st.subheader("▶️ Run Classifier")
@@ -198,7 +210,7 @@ with tab2:
 
     # Show current config
     st.markdown("#### 📋 Current Configuration:")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("Provider", config['llm_provider'].upper())
     with col2:
@@ -214,9 +226,18 @@ with tab2:
     with col4:
         api_status = "✅ Set" if config['api_key'] else "🌍 From .env"
         st.metric("API Key", api_status)
+    with col5:
+        skip_mode = "Skip Classified" if config.get('skip_classified', True) else "Re-classify All"
+        st.metric("Mode", skip_mode)
 
-    # Show full model name
+    # Show full model name and mode explanation
     st.caption(f"Full model: `{config['model']}`")
+
+    # Important mode explanation
+    if config.get('skip_classified', True):
+        st.info("ℹ️ **Mode: Skip Already Classified** - Will only process pages that don't have visas yet. If all pages are already classified, you'll get 0 pages. Go to Configuration tab and uncheck 'Skip Already Classified Pages' to re-classify all pages.")
+    else:
+        st.warning("⚠️ **Mode: Re-classify All Pages** - Will process ALL pages, even those already classified. This will use more LLM credits.")
 
     # Check data source
     st.markdown("---")
