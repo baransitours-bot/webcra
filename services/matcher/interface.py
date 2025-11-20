@@ -7,14 +7,13 @@ INTERIOR Interface: Python API for service-to-service communication
 EXTERIOR Interface: Used by UI, CLI, and external systems
 """
 
-import yaml
 import json
 from typing import List, Dict, Callable, Optional
-from pathlib import Path
 
 from services.matcher.engine import MatcherEngine
 from services.matcher.repository import MatcherRepository
 from shared.logger import setup_logger
+from shared.service_config import get_service_config
 
 
 class MatcherService:
@@ -25,23 +24,13 @@ class MatcherService:
     Handles setup, configuration, and provides simple methods.
     """
 
-    def __init__(self, config_path: str = 'services/matcher/config.yaml'):
-        """
-        Initialize matcher service.
-
-        Args:
-            config_path: Path to config file
-        """
+    def __init__(self):
+        """Initialize matcher service with centralized configuration"""
         self.logger = setup_logger('matcher_service')
 
-        # Load configuration
-        config_file = Path(config_path)
-        if config_file.exists():
-            with open(config_path, 'r') as f:
-                self.config = yaml.safe_load(f)
-        else:
-            self.logger.warning(f"Config not found: {config_path}, using defaults")
-            self.config = self._default_config()
+        # Load configuration from centralized system (DB > YAML defaults)
+        config_loader = get_service_config()
+        self.config = config_loader.get_matcher_config()
 
         # Initialize layers
         self.repo = MatcherRepository()  # FUEL TRANSPORT
@@ -100,21 +89,6 @@ class MatcherService:
             'ready': visa_count > 0
         }
 
-    def _default_config(self) -> Dict:
-        """Default configuration"""
-        return {
-            'weights': {
-                'age': 1.0,
-                'education': 2.0,
-                'experience': 1.5,
-                'language': 1.0
-            },
-            'thresholds': {
-                'high_match': 80.0,
-                'medium_match': 60.0
-            }
-        }
-
 
 class MatcherController:
     """
@@ -124,9 +98,9 @@ class MatcherController:
     Provides user-friendly methods and progress tracking.
     """
 
-    def __init__(self, config_path: str = 'services/matcher/config.yaml'):
+    def __init__(self):
         """Initialize controller with service"""
-        self.service = MatcherService(config_path)
+        self.service = MatcherService()
         self.logger = setup_logger('matcher_controller')
 
     def match_with_progress(

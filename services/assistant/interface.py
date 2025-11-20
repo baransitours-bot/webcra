@@ -7,13 +7,12 @@ INTERIOR Interface: Python API for service-to-service communication
 EXTERIOR Interface: Used by UI, CLI, and external systems
 """
 
-import yaml
 from typing import List, Dict, Callable, Optional
-from pathlib import Path
 
 from services.assistant.engine import AssistantEngine
 from services.assistant.repository import AssistantRepository
 from shared.logger import setup_logger
+from shared.service_config import get_service_config
 
 
 class AssistantService:
@@ -24,23 +23,13 @@ class AssistantService:
     Handles setup, configuration, and provides simple methods.
     """
 
-    def __init__(self, config_path: str = 'services/assistant/config.yaml'):
-        """
-        Initialize assistant service.
-
-        Args:
-            config_path: Path to config file
-        """
+    def __init__(self):
+        """Initialize assistant service with centralized configuration"""
         self.logger = setup_logger('assistant_service')
 
-        # Load configuration
-        config_file = Path(config_path)
-        if config_file.exists():
-            with open(config_path, 'r') as f:
-                self.config = yaml.safe_load(f)
-        else:
-            self.logger.warning(f"Config not found: {config_path}, using defaults")
-            self.config = self._default_config()
+        # Load configuration from centralized system (DB > YAML defaults)
+        config_loader = get_service_config()
+        self.config = config_loader.get_assistant_config()
 
         # Initialize layers
         self.repo = AssistantRepository()  # FUEL TRANSPORT
@@ -81,16 +70,6 @@ class AssistantService:
             'llm_available': self.engine.llm_client is not None
         }
 
-    def _default_config(self) -> Dict:
-        """Default configuration"""
-        return {
-            'use_enhanced_retrieval': True,
-            'context': {
-                'max_visas': 5,
-                'max_history': 10
-            }
-        }
-
 
 class AssistantController:
     """
@@ -100,9 +79,9 @@ class AssistantController:
     Provides user-friendly methods and streaming support.
     """
 
-    def __init__(self, config_path: str = 'services/assistant/config.yaml'):
+    def __init__(self):
         """Initialize controller with service"""
-        self.service = AssistantService(config_path)
+        self.service = AssistantService()
         self.logger = setup_logger('assistant_controller')
 
     def chat(

@@ -7,13 +7,12 @@ INTERIOR Interface: Python API for service-to-service communication
 EXTERIOR Interface: Used by UI, CLI, and external systems
 """
 
-import yaml
 from typing import List, Dict, Callable, Optional
-from pathlib import Path
 
 from services.classifier.engine import ClassifierEngine
 from services.classifier.repository import ClassifierRepository
 from shared.logger import setup_logger
+from shared.service_config import get_service_config
 
 
 class ClassifierService:
@@ -24,23 +23,13 @@ class ClassifierService:
     Handles setup, configuration, and provides simple methods.
     """
 
-    def __init__(self, config_path: str = 'services/classifier/config.yaml'):
-        """
-        Initialize classifier service.
-
-        Args:
-            config_path: Path to config file
-        """
+    def __init__(self):
+        """Initialize classifier service with centralized configuration"""
         self.logger = setup_logger('classifier_service')
 
-        # Load configuration
-        config_file = Path(config_path)
-        if config_file.exists():
-            with open(config_path, 'r') as f:
-                self.config = yaml.safe_load(f)
-        else:
-            self.logger.warning(f"Config not found: {config_path}, using defaults")
-            self.config = self._default_config()
+        # Load configuration from centralized system (DB > YAML defaults)
+        config_loader = get_service_config()
+        self.config = config_loader.get_classifier_config()
 
         # Initialize layers
         self.repo = ClassifierRepository()  # FUEL TRANSPORT
@@ -101,24 +90,6 @@ class ClassifierService:
             'countries': list(by_country.keys())
         }
 
-    def _default_config(self) -> Dict:
-        """Default configuration"""
-        return {
-            'visa_type_keywords': {
-                'work': ['work', 'skilled', 'employment'],
-                'study': ['study', 'student', 'education'],
-                'family': ['family', 'spouse', 'partner'],
-                'business': ['business', 'investor'],
-                'tourist': ['tourist', 'visitor', 'travel']
-            },
-            'patterns': {
-                'age': [r'(\d+)\s*(?:to|-)\s*(\d+)\s*years'],
-                'experience': [r'(\d+)\s*years?\s*(?:of)?\s*experience'],
-                'fees': [r'\$\s*(\d+(?:,\d{3})*)'],
-                'processing_time': [r'(\d+)\s*(?:to|-)\s*(\d+)\s*(days|weeks|months)']
-            }
-        }
-
 
 class ClassifierController:
     """
@@ -128,9 +99,9 @@ class ClassifierController:
     Provides callback support for progress tracking.
     """
 
-    def __init__(self, config_path: str = 'services/classifier/config.yaml'):
+    def __init__(self):
         """Initialize controller with service"""
-        self.service = ClassifierService(config_path)
+        self.service = ClassifierService()
         self.logger = setup_logger('classifier_controller')
 
     def classify_with_progress(
