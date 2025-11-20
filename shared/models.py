@@ -131,6 +131,29 @@ class Visa:
         """Get years of experience required"""
         return self.requirements.get('experience_years', 0)
 
+    @property
+    def application_fee(self) -> str:
+        """Get application fee"""
+        if not self.fees:
+            return "Not specified"
+
+        # Try common fee field names
+        fee = (self.fees.get('application_fee') or
+               self.fees.get('application') or
+               self.fees.get('total_estimated') or
+               self.fees.get('fee'))
+
+        if fee:
+            return str(fee)
+
+        # If no specific fee found, show first available fee
+        if self.fees:
+            first_fee = next((v for v in self.fees.values() if v), None)
+            if first_fee:
+                return str(first_fee)
+
+        return "Not specified"
+
     def matches_query(self, query: str) -> bool:
         """Check if visa matches a search query"""
         query_lower = query.lower()
