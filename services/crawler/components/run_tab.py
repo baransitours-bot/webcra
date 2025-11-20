@@ -1,11 +1,12 @@
 """
-Crawler Run Tab Component
+Crawler Run Tab Component - Updated to use Controller
 """
 
 import streamlit as st
 import yaml
 from shared.components import ProgressDisplay, LogViewer
-from shared.database import Database
+from services.crawler.interface import CrawlerController
+
 
 class RunTab:
     """Handles crawler execution UI"""
@@ -39,93 +40,92 @@ class RunTab:
 
     @staticmethod
     def _execute_crawl(config: dict):
-        """Execute the crawling process"""
+        """Execute the crawling process using Controller"""
         progress = ProgressDisplay()
         logger = LogViewer(max_lines=30, expanded=True)
 
         try:
-            logger.add_info("Initializing crawler...")
+            logger.add_info("Initializing crawler controller...")
 
-            # Load global config
-            with open('config.yaml', 'r') as f:
-                global_config = yaml.safe_load(f)
+            # Initialize controller
+            controller = CrawlerController()
+            logger.add_success("Controller initialized")
 
-            # Load crawler config
-            with open('services/crawler/config.yaml', 'r') as f:
-                crawler_config = yaml.safe_load(f)
-
-            # Override with user settings
-            crawler_config['max_pages'] = config['max_pages']
-            crawler_config['max_depth'] = config['max_depth']
-            crawler_config['request_delay'] = config['request_delay']
+            # Update config
+            crawler_config = controller.get_config()
+            crawler_config['crawling']['max_pages_per_country'] = config['max_pages']
+            crawler_config['crawling']['max_depth'] = config['max_depth']
+            crawler_config['crawling']['delay_between_requests'] = config['request_delay']
 
             logger.add_info(f"Max pages: {config['max_pages']}")
             logger.add_info(f"Max depth: {config['max_depth']}")
             logger.add_info(f"Request delay: {config['request_delay']}s")
 
-            # Initialize database and crawler
-            from services.crawler.spider import ImmigrationCrawler
+            # Load global config to get country URLs
+            with open('config.yaml', 'r') as f:
+                global_config = yaml.safe_load(f)
 
-            db = Database()
-            logger.add_success("Database initialized")
+            # Prepare countries to crawl
+            countries_to_crawl = []
+            for country_name in config['countries']:
+                if country_name in global_config['countries']:
+                    country_info = global_config['countries'][country_name]
+                    countries_to_crawl.append({
+                        'name': country_info['name'],
+                        'seed_urls': country_info['seed_urls']
+                    })
 
-            # Get country configurations
-            countries_to_crawl = [
-                global_config['countries'][country]
-                for country in config['countries']
-                if country in global_config['countries']
-            ]
+            if not countries_to_crawl:
+                logger.add_error("No valid countries found")
+                return
 
             logger.add_info(f"Crawling {len(countries_to_crawl)} countries...")
 
+            # Tracking
             total_countries = len(countries_to_crawl)
-            progress.update(0, total_countries, "Starting...")
+            current_country_idx = [0]  # Use list for mutable closure
+            total_pages = [0]
 
-            # Crawl each country
-            all_results = []
-
-            for i, country_config in enumerate(countries_to_crawl):
-                country_name = country_config['name']
+            # Define callbacks
+            def on_start(country):
+                current_country_idx[0] += 1
                 logger.add_info(f"\n{'='*50}")
-                logger.add_info(f"Crawling {country_name}...")
+                logger.add_info(f"Crawling {country}...")
+                progress.update(
+                    current_country_idx[0] - 1,
+                    total_countries,
+                    f"Crawling {country}"
+                )
 
-                progress.update(i, total_countries, f"Crawling {country_name}")
+            def on_complete(country, result):
+                pages = result.get('pages_saved', 0)
+                total_pages[0] += pages
+                logger.add_success(f"✓ {country}: {pages} pages saved")
+                progress.update(
+                    current_country_idx[0],
+                    total_countries,
+                    f"Completed {country}"
+                )
 
-                # Create crawler for this country
-                crawler = ImmigrationCrawler([country_config], crawler_config)
+            def on_error(country, error):
+                logger.add_error(f"✗ {country}: {error}")
 
-                # Crawl
-                country_results = crawler.crawl_all()
-                all_results.extend(country_results)
-
-                logger.add_success(f"Completed {country_name}: {len(country_results)} pages")
-
-                progress.update(i + 1, total_countries, f"Completed {country_name}")
+            # Crawl with progress
+            results = controller.crawl_with_progress(
+                countries_to_crawl,
+                on_start=on_start,
+                on_complete=on_complete,
+                on_error=on_error
+            )
 
             # Final summary
-            progress.complete(f"✅ Crawling complete! {len(all_results)} pages total")
-
             logger.add_info(f"\n{'='*50}")
-            logger.add_success(f"CRAWLING COMPLETED")
-            logger.add_info(f"Total pages crawled: {len(all_results)}")
-            logger.add_info(f"Countries processed: {total_countries}")
-            logger.add_info("Data saved to database with versioning")
+            logger.add_success(f"✅ Crawling complete!")
+            logger.add_info(f"Total pages saved: {total_pages[0]}")
+            logger.add_info(f"Countries crawled: {len(results)}")
 
-            # Save to session
-            st.session_state['crawler_results'] = {
-                'pages_crawled': len(all_results),
-                'countries': [c['name'] for c in countries_to_crawl],
-                'status': 'completed',
-                'results': all_results
-            }
-
-            st.success(f"✅ Crawling completed! {len(all_results)} pages saved to database")
-            st.info("📊 View results in the **Results** tab →")
+            st.success(f"✅ Crawled {len(results)} countries, saved {total_pages[0]} pages")
 
         except Exception as e:
             logger.add_error(f"Crawling failed: {str(e)}")
-            progress.error("❌ Crawling failed")
-            st.error(f"❌ Error: {str(e)}")
-
-            import traceback
-            st.code(traceback.format_exc())
+            st.error(f"Error: {str(e)}")

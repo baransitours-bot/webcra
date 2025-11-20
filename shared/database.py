@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 from contextlib import contextmanager
+from shared.models import Visa, CrawledPage, load_visas_from_rows, load_pages_from_rows
 
 
 class Database:
@@ -352,6 +353,67 @@ class Database:
 
             return visas
 
+    def get_visas(self, country: Optional[str] = None) -> List[Visa]:
+        """
+        Get visas as Visa model objects.
+
+        This is the preferred method - returns typed Visa objects
+        that are easier to work with.
+
+        Args:
+            country: Optional country filter
+
+        Returns:
+            List of Visa objects
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            if country:
+                cursor.execute("""
+                    SELECT * FROM visas
+                    WHERE is_latest = 1 AND country = ?
+                    ORDER BY created_at DESC
+                """, (country,))
+            else:
+                cursor.execute("""
+                    SELECT * FROM visas
+                    WHERE is_latest = 1
+                    ORDER BY created_at DESC
+                """)
+
+            rows = [dict(row) for row in cursor.fetchall()]
+            return load_visas_from_rows(rows)
+
+    def get_pages(self, country: Optional[str] = None) -> List[CrawledPage]:
+        """
+        Get crawled pages as CrawledPage model objects.
+
+        Args:
+            country: Optional country filter
+
+        Returns:
+            List of CrawledPage objects
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            if country:
+                cursor.execute("""
+                    SELECT * FROM crawled_pages
+                    WHERE is_latest = 1 AND country = ?
+                    ORDER BY crawled_at DESC
+                """, (country,))
+            else:
+                cursor.execute("""
+                    SELECT * FROM crawled_pages
+                    WHERE is_latest = 1
+                    ORDER BY crawled_at DESC
+                """)
+
+            rows = [dict(row) for row in cursor.fetchall()]
+            return load_pages_from_rows(rows)
+
     def get_visa_history(self, visa_type: str, country: str) -> List[Dict]:
         """Get all versions of a specific visa"""
         with self.get_connection() as conn:
@@ -520,32 +582,3 @@ class Database:
             stats['embeddings'] = cursor.fetchone()['count']
 
             return stats
-
-
-# Backward compatibility - keep old DataStore for migration
-class DataStore:
-    """Legacy file-based storage - kept for backward compatibility"""
-
-    def __init__(self, base_path: str = "data"):
-        self.base_path = Path(base_path)
-        self.raw_path = self.base_path / "raw"
-        self.processed_path = self.base_path / "processed"
-        self.raw_path.mkdir(parents=True, exist_ok=True)
-        self.processed_path.mkdir(parents=True, exist_ok=True)
-
-    def load_structured_visas(self) -> List[dict]:
-        """Load visas from JSON file"""
-        filepath = self.processed_path / "visas.json"
-        if not filepath.exists():
-            return []
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return json.load(f)
-
-    def save_raw_page(self, country: str, page_data: dict):
-        """Save raw page to JSON file"""
-        country_dir = self.raw_path / country
-        country_dir.mkdir(exist_ok=True)
-        filename = f"{hash(page_data['url'])}.json"
-        filepath = country_dir / filename
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(page_data, f, indent=2, ensure_ascii=False)

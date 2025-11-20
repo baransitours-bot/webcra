@@ -233,6 +233,9 @@ with tab2:
                 import time
                 import os
                 logs = []
+                all_visas = []
+                total_pages = 0
+                pages_processed = 0
 
                 try:
                     # Set API key in environment if provided
@@ -254,101 +257,84 @@ with tab2:
                     logs.append(f"[INFO] Debug mode: {'ON' if config['show_llm_response'] else 'OFF'}")
                     log_area.code('\n'.join(logs))
 
-                    # Filter pages
-                    filtered_pages = pages
-                    if config['countries_filter']:
-                        filtered_pages = [p for p in pages if p['country'] in config['countries_filter']]
-                        logs.append(f"[INFO] Filtered to {len(filtered_pages)} pages from: {', '.join(config['countries_filter'])}")
+                    # Use ClassifierController
+                    from services.classifier.interface import ClassifierController
+                    controller = ClassifierController()
 
-                    total_pages = len(filtered_pages)
-                    logs.append(f"[INFO] Processing {total_pages} pages...")
-                    log_area.code('\n'.join(logs))
+                    # Determine country filter
+                    country_filter = config['countries_filter'][0] if config['countries_filter'] else None
 
-                    # Initialize extractor (will use updated ConfigManager)
-                    from services.classifier.visa_extractor import VisaExtractor
-                    extractor = VisaExtractor()
+                    # Define callbacks
+                    def on_start():
+                        logs.append(f"[INFO] Classification started...")
+                        log_area.code('\n'.join(logs))
 
-                    all_visas = []
-                    pages_processed = 0
-                    visas_extracted = 0
+                    def on_page(current, total, page_title):
+                        nonlocal total_pages, pages_processed
+                        total_pages = total
+                        pages_processed = current
 
-                    status_text.text(f"Processing... (0/{total_pages} pages)")
-                    progress_bar.progress(0.05)
+                        logs.append(f"\n[{current}/{total}] Processing: {page_title[:60]}...")
+                        log_area.code('\n'.join(logs[-25:]))
 
-                    for i, page in enumerate(filtered_pages):
-                        try:
-                            logs.append(f"\n[{i+1}/{total_pages}] Processing: {page['title'][:60]}...")
-                            log_area.code('\n'.join(logs[-25:]))
+                        progress = current / total if total > 0 else 0
+                        progress_bar.progress(max(0.05, progress))
+                        status_text.text(f"Processing... ({current}/{total} pages)")
 
-                            # Extract visa
-                            visa_data = extractor.extract_visa_from_text(
-                                page['content'],
-                                page['country']
-                            )
+                    def on_visa_found(visa_data):
+                        all_visas.append(visa_data)
+                        logs.append(f"[SUCCESS] ✅ Extracted: {visa_data.get('visa_type', 'Unknown')}")
+                        log_area.code('\n'.join(logs[-25:]))
 
-                            # Show LLM response if debug mode
-                            if config['show_llm_response'] and visa_data:
-                                with llm_response_container:
-                                    st.markdown(f"**Page {i+1}: {page['title'][:50]}**")
-                                    st.json(visa_data)
-                                    st.markdown("---")
+                        # Show LLM response if debug mode
+                        if config['show_llm_response']:
+                            with llm_response_container:
+                                st.markdown(f"**Visa {len(all_visas)}: {visa_data.get('visa_type', 'Unknown')}**")
+                                st.json(visa_data)
+                                st.markdown("---")
 
-                            if visa_data:
-                                # Save to database
-                                db.save_visa(
-                                    visa_type=visa_data.get('visa_type', 'Unknown'),
-                                    country=page['country'],
-                                    category=visa_data.get('category', 'unknown'),
-                                    requirements=visa_data.get('requirements', {}),
-                                    fees=visa_data.get('fees', {}),
-                                    processing_time=visa_data.get('processing_time', 'Not specified'),
-                                    documents_required=visa_data.get('eligibility_criteria', []),
-                                    timeline_stages=[],
-                                    cost_breakdown={},
-                                    source_urls=[page['url']]
-                                )
+                        status_text.text(f"Processing... ({pages_processed}/{total_pages} pages, {len(all_visas)} visas found)")
 
-                                all_visas.append(visa_data)
-                                visas_extracted += 1
-                                logs.append(f"[SUCCESS] ✅ Extracted: {visa_data.get('visa_type', 'Unknown')}")
-                            else:
-                                logs.append(f"[SKIP] ⏭️ No visa data found")
+                    def on_complete(result):
+                        progress_bar.progress(1.0)
 
-                            pages_processed += 1
-                            progress = pages_processed / total_pages
-                            progress_bar.progress(progress)
-                            status_text.text(f"Processing... ({pages_processed}/{total_pages} pages, {visas_extracted} visas found)")
-                            log_area.code('\n'.join(logs[-25:]))
+                        visas_count = result.get('visas_extracted', len(all_visas))
+                        pages_count = result.get('pages_processed', pages_processed)
 
-                            # Small delay to avoid rate limiting
-                            time.sleep(0.3)
+                        logs.append(f"\n[SUCCESS] ==================== COMPLETED ====================")
+                        logs.append(f"[INFO] Pages processed: {pages_count}")
+                        logs.append(f"[INFO] Visas extracted: {visas_count}")
+                        if pages_count > 0:
+                            logs.append(f"[INFO] Success rate: {(visas_count/pages_count*100):.1f}%")
+                        logs.append(f"[INFO] Data saved to database with versioning")
+                        log_area.code('\n'.join(logs))
 
-                        except Exception as e:
-                            logs.append(f"[ERROR] ❌ Failed: {str(e)[:100]}")
-                            log_area.code('\n'.join(logs[-25:]))
-                            continue
+                        status_text.text(f"✅ Completed! Processed {pages_count} pages, extracted {visas_count} visas")
 
-                    # Completion
-                    progress_bar.progress(1.0)
-                    status_text.text(f"✅ Completed! Processed {pages_processed} pages, extracted {visas_extracted} visas")
+                    def on_error(error_msg):
+                        logs.append(f"[ERROR] ❌ {error_msg[:100]}")
+                        log_area.code('\n'.join(logs[-25:]))
 
-                    logs.append(f"\n[SUCCESS] ==================== COMPLETED ====================")
-                    logs.append(f"[INFO] Pages processed: {pages_processed}")
-                    logs.append(f"[INFO] Visas extracted: {visas_extracted}")
-                    logs.append(f"[INFO] Success rate: {(visas_extracted/pages_processed*100):.1f}%")
-                    logs.append(f"[INFO] Data saved to database with versioning")
-                    log_area.code('\n'.join(logs))
+                    # Run classification with callbacks
+                    result = controller.classify_with_progress(
+                        country=country_filter,
+                        on_start=on_start,
+                        on_page=on_page,
+                        on_visa_found=on_visa_found,
+                        on_complete=on_complete,
+                        on_error=on_error
+                    )
 
                     # Save results to session
                     st.session_state['classifier_results'] = {
-                        'pages_processed': pages_processed,
-                        'visas_extracted': visas_extracted,
+                        'pages_processed': result.get('pages_processed', pages_processed),
+                        'visas_extracted': result.get('visas_extracted', len(all_visas)),
                         'visas': all_visas,
                         'status': 'completed',
                         'model_used': config['model']
                     }
 
-                    st.success(f"✅ Classification completed! Extracted {visas_extracted} visas from {pages_processed} pages")
+                    st.success(f"✅ Classification completed! Extracted {len(all_visas)} visas from {result.get('pages_processed', 0)} pages")
                     st.info("📊 View results in the **Results** tab →")
 
                 except Exception as e:
