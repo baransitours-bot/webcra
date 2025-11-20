@@ -124,6 +124,7 @@ class ServiceConfigLoader:
             'llm': llm_config,
             'visa_categories': self.config_mgr.get_list_config('visa_categories', []),
             'visa_type_keywords': self.config_mgr.get_dict_config('visa_type_keywords', service='classifier', default={}),
+            'extraction_schema': self.config_mgr.get_extraction_schema(),  # Configurable extraction schema
             'extraction_fields': service_config.get('extraction_fields', []),
             'batch_size': service_config.get('batch_size', 1),
             'retry_attempts': service_config.get('retry_attempts', 2)
