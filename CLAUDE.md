@@ -293,10 +293,21 @@ All versioned tables have: `version`, `is_latest` (only query `is_latest=1`)
 
 ## Key Files Reference
 
-- `SYSTEM_DEVELOPMENT_GUIDE.md` - Complete feature building guide
-- `SYSTEM_MAP.md` - Visual architecture diagrams
-- `QUICK_REFERENCE.md` - Common code patterns
-- `SERVICE_ARCHITECTURE.md` - Deep dive on Engine/Fuel pattern
+All detailed documentation is now in `docs/claude-references/`:
+
+- `docs/claude-references/SYSTEM_DEVELOPMENT_GUIDE.md` - Complete feature building guide
+- `docs/claude-references/SYSTEM_MAP.md` - Visual architecture diagrams
+- `docs/claude-references/QUICK_REFERENCE.md` - Common code patterns
+- `docs/claude-references/SERVICE_ARCHITECTURE.md` - Deep dive on Engine/Fuel pattern
+- `docs/claude-references/ARCHITECTURE.md` - Overall system architecture
+- `docs/claude-references/STRUCTURE.md` - Project structure overview
+- `docs/claude-references/QUICK_START.md` - Getting started guide
+- `docs/claude-references/CONFIG_GUIDE.md` - Configuration system guide
+- `docs/claude-references/CONFIGURATION_LIFECYCLE.md` - Config lifecycle details
+- `docs/claude-references/DOCUMENTATION_INDEX.md` - Complete documentation index
+- `docs/claude-references/BUILD_SUMMARY.md` - Build and deployment summary
+- `docs/claude-references/REFACTORING_COMPLETE.md` - Refactoring history
+- `docs/claude-references/SYSTEM.md` - System overview
 - `legacy/` - Old code (DO NOT USE - reference only)
 
 ## Testing Pattern
