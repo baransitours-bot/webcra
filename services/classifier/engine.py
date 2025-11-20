@@ -57,18 +57,19 @@ class ClassifierEngine:
             self.logger.info("💡 Will use pattern-based extraction")
             return None
 
-    def classify_pages(self, country: str = None) -> Dict:
+    def classify_pages(self, country: str = None, skip_classified: bool = True) -> Dict:
         """
         Classify all pages for a country.
 
         Args:
             country: Optional country filter
+            skip_classified: If True, skip pages that already have visas (default: True to save LLM costs)
 
         Returns:
             Classification results
         """
         # Get pages from repository
-        pages = self.repo.get_pages(country=country)
+        pages = self.repo.get_pages(country=country, only_unclassified=skip_classified)
 
         if not pages:
             self.logger.warning(f"No pages found for {country or 'all countries'}")

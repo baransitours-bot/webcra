@@ -141,6 +141,12 @@ with tab1:
                 help="Display raw LLM output for debugging"
             )
 
+            skip_classified = st.checkbox(
+                "Skip Already Classified Pages",
+                value=True,
+                help="Only process pages without visas (saves time & LLM costs). Uncheck to re-classify all pages."
+            )
+
         with col2:
             # Country filter
             countries_filter = st.multiselect(
@@ -167,7 +173,8 @@ with tab1:
         'batch_size': batch_size,
         'countries_filter': countries_filter,
         'api_key': api_key_input,
-        'show_llm_response': show_llm_response
+        'show_llm_response': show_llm_response,
+        'skip_classified': skip_classified
     }
 
     st.success("✅ Configuration saved to session")
@@ -185,7 +192,8 @@ with tab2:
             'batch_size': 5,
             'countries_filter': [],
             'api_key': '',
-            'show_llm_response': False
+            'show_llm_response': False,
+            'skip_classified': True
         }
 
     # Show current config
@@ -288,6 +296,7 @@ with tab2:
                     logs.append(f"[INFO] Provider: {config['llm_provider']}")
                     logs.append(f"[INFO] Model: {config['model']}")
                     logs.append(f"[INFO] Debug mode: {'ON' if config['show_llm_response'] else 'OFF'}")
+                    logs.append(f"[INFO] Mode: {'Skip already classified' if config.get('skip_classified', True) else 'Re-classify all pages'}")
                     log_area.code('\n'.join(logs))
 
                     # Use ClassifierController
@@ -352,6 +361,7 @@ with tab2:
                     # Run classification with callbacks
                     result = controller.classify_with_progress(
                         country=country_filter,
+                        skip_classified=config.get('skip_classified', True),
                         on_start=on_start,
                         on_page=on_page,
                         on_visa_found=on_visa_found,

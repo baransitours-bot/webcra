@@ -23,17 +23,21 @@ class ClassifierRepository:
     def __init__(self):
         self.db = Database()
 
-    def get_pages(self, country: Optional[str] = None) -> List[CrawledPage]:
+    def get_pages(self, country: Optional[str] = None, only_unclassified: bool = False) -> List[CrawledPage]:
         """
         Get crawled pages to classify.
 
         Args:
             country: Optional country filter
+            only_unclassified: If True, only return pages without visas (default: False for backward compatibility)
 
         Returns:
             List of CrawledPage objects
         """
-        return self.db.get_pages(country=country)
+        if only_unclassified:
+            return self.db.get_unclassified_pages(country=country)
+        else:
+            return self.db.get_pages(country=country)
 
     def save_visa(self, visa: Visa) -> int:
         """

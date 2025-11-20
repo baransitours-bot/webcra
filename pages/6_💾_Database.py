@@ -42,19 +42,20 @@ with tabs[0]:
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric("Pages Crawled", stats.get('Pages Crawled', 0))
-        st.metric("Countries (Pages)", stats.get('Countries', 0))
+        st.metric("Pages Crawled", stats.get('pages_crawled', 0))
+        st.metric("Countries (Pages)", stats.get('countries', 0))
 
     with col2:
-        st.metric("Visas Total", stats.get('Visas Total', 0))
-        st.metric("Countries (Visas)", len(stats.get('Countries (Visas)', [])))
+        st.metric("Visas Total", stats.get('visas_total', 0))
+        # For countries from visas, we need a separate query or use the same 'countries' value
+        st.metric("Countries (Visas)", stats.get('countries', 0))
 
     with col3:
-        st.metric("Clients", stats.get('Clients', 0))
-        st.metric("Eligibility Checks", stats.get('Checks Performed', 0))
+        st.metric("Clients", stats.get('clients', 0))
+        st.metric("Eligibility Checks", stats.get('checks_performed', 0))
 
     with col4:
-        st.metric("Embeddings", stats.get('Embeddings', 0))
+        st.metric("Embeddings", stats.get('embeddings', 0))
 
         # Get settings count
         with db.get_connection() as conn:
