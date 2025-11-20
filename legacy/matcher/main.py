@@ -1,12 +1,19 @@
 """
 Matcher Service - Entry Point
+
+Matches user profiles to eligible visas.
+
+Usage:
+    python main.py match --profile user_profile.json
+    python main.py match --interactive
 """
 
 import yaml
 import json
 from services.matcher.ranker import VisaRanker
-from shared.database import DataStore
+from shared.database import Database
 from shared.logger import setup_logger
+
 
 def parse_arguments(args):
     """Parse command line arguments"""
@@ -28,6 +35,7 @@ def parse_arguments(args):
 
     return options
 
+
 def get_user_profile_interactive():
     """Get user profile via interactive prompts"""
     print("\n👤 Let's build your profile:\n")
@@ -45,22 +53,25 @@ def get_user_profile_interactive():
 
     return profile
 
+
 def display_matches(matches: list):
     """Display match results in a user-friendly format"""
     if not matches:
-        print("\n❌ No matching visas found.")
+        print("\nNo matching visas found.")
         return
 
-    print(f"\n✅ Found {len(matches)} matching visa options:\n")
+    print(f"\nFound {len(matches)} matching visa options:\n")
     print("=" * 80)
 
     for i, match in enumerate(matches[:10], 1):  # Show top 10
+        stars = int(match['eligibility_score'] // 20)
+
         print(f"\n{i}. {match['visa_type']}")
         print(f"   Country: {match['country']}")
         print(f"   Category: {match['category']}")
-        print(f"   Eligibility Score: {match['eligibility_score']}% {'⭐' * int(match['eligibility_score'] // 20)}")
-        print(f"   Match Level: {match['match_level'].upper()}")
-        print(f"   Status: {'✅ Eligible' if match['eligible'] else '⚠️  Not Eligible'}")
+        print(f"   Score: {match['eligibility_score']}% {'*' * stars}")
+        print(f"   Level: {match['match_level'].upper()}")
+        print(f"   Eligible: {'Yes' if match['eligible'] else 'No'}")
 
         if match['gaps']:
             print(f"   Gaps:")
@@ -76,20 +87,20 @@ def display_matches(matches: list):
         if match['processing_time']:
             print(f"   Processing Time: {match['processing_time']}")
 
-        print(f"   Source: {match['source_urls'][0] if match['source_urls'] else 'N/A'}")
+        source = match['source_urls'][0] if match['source_urls'] else 'N/A'
+        print(f"   Source: {source}")
 
     print("\n" + "=" * 80)
 
+
 def run_matcher(args):
     """
-    Run the matcher service
+    Run the matcher service.
 
-    Usage:
-      python main.py match --profile user_profile.json
-      python main.py match --interactive
+    Loads visas from database and matches them to user profile.
     """
     logger = setup_logger('matcher', 'matcher.log')
-    logger.info("🎯 Starting Matcher Service...")
+    logger.info("Starting Matcher Service...")
 
     # Load config
     with open('services/matcher/config.yaml', 'r') as f:
@@ -108,15 +119,17 @@ def run_matcher(args):
         logger.error("No profile specified. Use --profile or --interactive")
         return
 
-    # Load structured visa data
-    data_store = DataStore()
-    all_visas = data_store.load_structured_visas()
+    # Load visas from database (using new model method)
+    db = Database()
+    visas = db.get_visas()
 
-    if not all_visas:
-        logger.error("No structured visa data found. Run 'python main.py classify' first")
+    if not visas:
+        logger.error("No visa data found. Run Crawler and Classifier first.")
         return
 
-    logger.info(f"Loaded {len(all_visas)} structured visas")
+    # Convert to dicts for ranker (for backward compatibility)
+    all_visas = [visa.to_dict() for visa in visas]
+    logger.info(f"Loaded {len(all_visas)} visas from database")
 
     # Rank visas for user
     ranker = VisaRanker(config)
@@ -125,4 +138,4 @@ def run_matcher(args):
     # Display results
     display_matches(matches)
 
-    logger.info("✅ Matching complete!")
+    logger.info("Matching complete!")
