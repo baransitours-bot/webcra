@@ -391,50 +391,215 @@ with tab2:
 with tab3:
     st.subheader("📊 Classification Results")
 
-    if 'classifier_results' in st.session_state:
-        results = st.session_state['classifier_results']
+    # Create sub-tabs for current run vs database view
+    results_tab1, results_tab2 = st.tabs(["💾 Database View", "🔄 Current Run"])
 
-        # Summary metrics
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Pages Processed", results['pages_processed'])
-        with col2:
-            st.metric("Visas Extracted", results['visas_extracted'])
-        with col3:
-            success_rate = (results['visas_extracted'] / results['pages_processed'] * 100) if results['pages_processed'] > 0 else 0
-            st.metric("Success Rate", f"{success_rate:.1f}%")
-        with col4:
-            st.metric("Model Used", results['model_used'].split('/')[-1][:15])
+    # TAB 3.1: Database View (All Classified Visas)
+    with results_tab1:
+        st.markdown("### All Classified Visas in Database")
 
-        st.markdown("---")
+        from shared.database import Database
+        import pandas as pd
 
-        # Show visas
-        if results['visas']:
-            st.markdown(f"### Extracted Visas ({len(results['visas'])})")
+        db = Database()
+        visas = db.get_visas()
 
-            for i, visa in enumerate(results['visas'], 1):
-                with st.expander(f"{i}. {visa.get('visa_type', 'Unknown')} ({visa.get('category', 'unknown')})"):
-                    st.json(visa)
-
-            # Export button
-            st.markdown("---")
-            export_data = json.dumps(results['visas'], indent=2)
-            st.download_button(
-                "📥 Download Results as JSON",
-                data=export_data,
-                file_name=f"classified_visas_{results['model_used'].replace('/', '_')}.json",
-                mime="application/json"
-            )
+        if not visas:
+            st.warning("⚠️ No visas in database yet. Run the classifier first.")
         else:
-            st.warning("⚠️ No visas were extracted. Check the logs for details.")
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Visas", len(visas))
+            with col2:
+                countries = set(v.country for v in visas)
+                st.metric("Countries", len(countries))
+            with col3:
+                categories = [v.category for v in visas if v.category]
+                st.metric("Categories", len(set(categories)))
+            with col4:
+                unclassified_pages = len(db.get_unclassified_pages())
+                st.metric("Unclassified Pages", unclassified_pages)
 
-        st.markdown("---")
-        st.info("""
-        **Next Steps:**
-        1. View data in 💾 **Database** page
-        2. Create embeddings: `python scripts/index_embeddings.py`
-        3. Test semantic search: `python scripts/search_semantic.py`
-        """)
+            st.markdown("---")
 
-    else:
-        st.info("ℹ️ No results yet. Run the classifier in the **Run** tab first.")
+            # Filters
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                country_filter = st.selectbox(
+                    "Filter by Country",
+                    ["All"] + sorted(list(countries)),
+                    key="db_country_filter"
+                )
+            with col2:
+                category_filter = st.selectbox(
+                    "Filter by Category",
+                    ["All"] + sorted(list(set(categories))),
+                    key="db_category_filter"
+                )
+            with col3:
+                search_term = st.text_input("Search Visa Type", "", key="db_search")
+
+            # Apply filters
+            filtered_visas = visas
+            if country_filter != "All":
+                filtered_visas = [v for v in filtered_visas if v.country == country_filter]
+            if category_filter != "All":
+                filtered_visas = [v for v in filtered_visas if v.category == category_filter]
+            if search_term:
+                filtered_visas = [v for v in filtered_visas if search_term.lower() in v.visa_type.lower()]
+
+            st.markdown(f"**Showing {len(filtered_visas)} of {len(visas)} visas**")
+
+            # Display options
+            view_mode = st.radio("View Mode", ["Table", "Cards", "Detailed"], horizontal=True, key="db_view_mode")
+
+            if view_mode == "Table":
+                # Create DataFrame for table view
+                table_data = []
+                for visa in filtered_visas:
+                    table_data.append({
+                        'Visa Type': visa.visa_type,
+                        'Country': visa.country.title(),
+                        'Category': visa.category.title() if visa.category else 'Unknown',
+                        'Age': visa.age_range,
+                        'Processing Time': visa.processing_time or 'N/A',
+                        'Fee': visa.application_fee or 'N/A'
+                    })
+
+                if table_data:
+                    df = pd.DataFrame(table_data)
+                    st.dataframe(df, use_container_width=True, height=400)
+
+                    # Export
+                    csv = df.to_csv(index=False)
+                    st.download_button(
+                        "📥 Download Table as CSV",
+                        data=csv,
+                        file_name="classified_visas.csv",
+                        mime="text/csv"
+                    )
+
+            elif view_mode == "Cards":
+                # Card view with pagination
+                items_per_page = 10
+                total_pages = (len(filtered_visas) + items_per_page - 1) // items_per_page
+
+                page = st.number_input("Page", min_value=1, max_value=max(1, total_pages), value=1, key="db_page")
+                start_idx = (page - 1) * items_per_page
+                end_idx = start_idx + items_per_page
+                page_visas = filtered_visas[start_idx:end_idx]
+
+                for visa in page_visas:
+                    with st.expander(f"🎫 {visa.visa_type} ({visa.country.title()})"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write(f"**Category:** {visa.category.title() if visa.category else 'Unknown'}")
+                            st.write(f"**Age Requirement:** {visa.age_range}")
+                            st.write(f"**Processing Time:** {visa.processing_time or 'Not specified'}")
+                        with col2:
+                            st.write(f"**Application Fee:** {visa.application_fee or 'Not specified'}")
+                            st.write(f"**Source URLs:** {len(visa.source_urls)}")
+                            if visa.created_at:
+                                st.write(f"**Classified:** {visa.created_at[:10]}")
+
+                        # Show full details
+                        if st.checkbox(f"Show Full Details", key=f"details_{visa.id}"):
+                            st.json(visa.to_dict())
+
+                st.caption(f"Page {page} of {total_pages}")
+
+            else:  # Detailed view
+                for i, visa in enumerate(filtered_visas[:20], 1):  # Limit to 20 for detailed view
+                    st.markdown(f"### {i}. {visa.visa_type}")
+                    st.markdown(f"**Country:** {visa.country.title()} | **Category:** {visa.category.title() if visa.category else 'Unknown'}")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("#### Requirements")
+                        if visa.requirements:
+                            for key, value in visa.requirements.items():
+                                if value:
+                                    st.write(f"- **{key.replace('_', ' ').title()}:** {value}")
+                        else:
+                            st.write("No requirements listed")
+
+                    with col2:
+                        st.markdown("#### Fees & Processing")
+                        if visa.fees:
+                            for key, value in visa.fees.items():
+                                if value:
+                                    st.write(f"- **{key.replace('_', ' ').title()}:** {value}")
+                        else:
+                            st.write("No fees listed")
+
+                        st.write(f"**Processing Time:** {visa.processing_time or 'Not specified'}")
+
+                    if visa.documents_required:
+                        st.markdown("#### Documents Required")
+                        for doc in visa.documents_required:
+                            st.write(f"- {doc}")
+
+                    st.markdown("---")
+
+                if len(filtered_visas) > 20:
+                    st.info(f"ℹ️ Showing first 20 of {len(filtered_visas)} visas. Use Table or Cards view to see all.")
+
+            # Export all filtered data
+            st.markdown("---")
+            export_data = json.dumps([v.to_dict() for v in filtered_visas], indent=2)
+            st.download_button(
+                "📥 Download All Filtered Visas as JSON",
+                data=export_data,
+                file_name="classified_visas_all.json",
+                mime="application/json",
+                key="db_export_json"
+            )
+
+    # TAB 3.2: Current Run Results
+    with results_tab2:
+        if 'classifier_results' in st.session_state:
+            results = st.session_state['classifier_results']
+
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Pages Processed", results['pages_processed'])
+            with col2:
+                st.metric("Visas Extracted", results['visas_extracted'])
+            with col3:
+                success_rate = (results['visas_extracted'] / results['pages_processed'] * 100) if results['pages_processed'] > 0 else 0
+                st.metric("Success Rate", f"{success_rate:.1f}%")
+            with col4:
+                st.metric("Model Used", results['model_used'].split('/')[-1][:15])
+
+            st.markdown("---")
+
+            # Show visas
+            if results['visas']:
+                st.markdown(f"### Extracted Visas This Run ({len(results['visas'])})")
+
+                for i, visa in enumerate(results['visas'], 1):
+                    with st.expander(f"{i}. {visa.get('visa_type', 'Unknown')} ({visa.get('category', 'unknown')})"):
+                        st.json(visa)
+
+                # Export button
+                st.markdown("---")
+                export_data = json.dumps(results['visas'], indent=2)
+                st.download_button(
+                    "📥 Download This Run as JSON",
+                    data=export_data,
+                    file_name=f"classified_visas_run_{results['model_used'].replace('/', '_')}.json",
+                    mime="application/json",
+                    key="run_export_json"
+                )
+            else:
+                st.warning("⚠️ No visas were extracted in this run. Check the logs for details.")
+
+            st.markdown("---")
+            st.info("""
+            **💡 Tip:** Switch to the **Database View** tab to see ALL classified visas, not just this run.
+            """)
+
+        else:
+            st.info("ℹ️ No results yet. Run the classifier in the **Run** tab first.")
