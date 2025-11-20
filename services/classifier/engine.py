@@ -3,13 +3,14 @@ Classifier Engine - CORE LOGIC LAYER
 
 Core business logic for visa extraction from text.
 Uses LLM or pattern matching to extract structured data.
+Supports dual extraction: visa-specific + general immigration content.
 
 No direct database access - uses repository.
 """
 
 import json
-from typing import Dict, List, Optional
-from shared.models import CrawledPage, Visa
+from typing import Dict, List, Optional, Tuple
+from shared.models import CrawledPage, Visa, GeneralContent
 from shared.logger import setup_logger
 from services.classifier.repository import ClassifierRepository
 from services.assistant.llm_client import LLMClient
@@ -59,7 +60,8 @@ class ClassifierEngine:
 
     def classify_pages(self, country: str = None, skip_classified: bool = True) -> Dict:
         """
-        Classify all pages for a country.
+        Classify all pages for a country using dual extraction.
+        Extracts both visa-specific and general immigration content.
 
         Args:
             country: Optional country filter
@@ -76,26 +78,35 @@ class ClassifierEngine:
             return {
                 'pages_processed': 0,
                 'visas_extracted': 0,
+                'general_content_extracted': 0,
                 'errors': 0
             }
 
-        self.logger.info(f"Classifying {len(pages)} pages...")
+        self.logger.info(f"Classifying {len(pages)} pages with dual extraction...")
 
         visas_extracted = 0
+        general_content_extracted = 0
         errors = 0
 
         for i, page in enumerate(pages, 1):
             try:
-                # Extract visa from page
-                visa = self.extract_visa_from_page(page)
+                # Extract BOTH visa and general content from page
+                visa, general_content = self.extract_from_page(page)
 
                 if visa:
                     # Save via repository
                     self.repo.save_visa(visa)
                     visas_extracted += 1
-                    self.logger.info(f"[{i}/{len(pages)}] ✓ {visa.visa_type}")
-                else:
-                    self.logger.debug(f"[{i}/{len(pages)}] No visa found")
+                    self.logger.info(f"[{i}/{len(pages)}] ✓ Visa: {visa.visa_type}")
+
+                if general_content:
+                    # Save general content
+                    self.repo.save_general_content(general_content)
+                    general_content_extracted += 1
+                    self.logger.info(f"[{i}/{len(pages)}] ✓ General: {general_content.title[:50]}")
+
+                if not visa and not general_content:
+                    self.logger.debug(f"[{i}/{len(pages)}] No content extracted")
 
             except Exception as e:
                 self.logger.error(f"[{i}/{len(pages)}] Error: {e}")
@@ -104,12 +115,36 @@ class ClassifierEngine:
         return {
             'pages_processed': len(pages),
             'visas_extracted': visas_extracted,
+            'general_content_extracted': general_content_extracted,
             'errors': errors
         }
 
+    def extract_from_page(self, page: CrawledPage) -> Tuple[Optional[Visa], Optional[GeneralContent]]:
+        """
+        Extract BOTH visa and general content from a single page (dual extraction).
+
+        Args:
+            page: CrawledPage object
+
+        Returns:
+            Tuple of (Visa object or None, GeneralContent object or None)
+        """
+        if not page.content or len(page.content.strip()) < 100:
+            return None, None
+
+        # Use LLM if available, otherwise patterns (legacy)
+        if self.llm_client:
+            return self._extract_with_llm_dual(page.content, page.country, page)
+        else:
+            # Fallback to visa-only extraction for pattern-based
+            visa_data = self._extract_with_patterns(page.content, page.country)
+            visa = self._create_visa_model(visa_data, page) if visa_data else None
+            return visa, None
+
     def extract_visa_from_page(self, page: CrawledPage) -> Optional[Visa]:
         """
-        Extract visa information from a single page.
+        Extract visa information from a single page (legacy method).
+        Use extract_from_page() for dual extraction.
 
         Args:
             page: CrawledPage object
@@ -117,23 +152,75 @@ class ClassifierEngine:
         Returns:
             Visa object or None if no visa found
         """
-        if not page.content or len(page.content.strip()) < 100:
-            return None
+        visa, _ = self.extract_from_page(page)
+        return visa
 
-        # Use LLM if available, otherwise patterns
-        if self.llm_client:
-            visa_data = self._extract_with_llm(page.content, page.country)
-        else:
-            visa_data = self._extract_with_patterns(page.content, page.country)
+    def _extract_with_llm_dual(self, text: str, country: str, page: CrawledPage) -> Tuple[Optional[Visa], Optional[GeneralContent]]:
+        """
+        Use LLM to extract BOTH visa and general content (dual extraction).
+        Returns array with both types if both are present.
+        """
+        # Get extraction schema from config
+        schema_config = self.config.get('extraction_schema')
 
-        if not visa_data:
-            return None
+        # Build dual extraction prompt
+        from shared.extraction_schema import build_dual_extraction_prompt
 
-        # Convert to Visa model
-        return self._create_visa_model(visa_data, page)
+        if not schema_config:
+            # Use default standard schema if not configured
+            from shared.extraction_schema import SCHEMA_PRESETS
+            schema_config = SCHEMA_PRESETS['standard']
+
+        prompt = build_dual_extraction_prompt(text, country, schema_config)
+
+        try:
+            response = self.llm_client.chat([
+                {"role": "user", "content": prompt}
+            ])
+
+            # Parse JSON response (should be an array)
+            content = response.strip()
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+
+            extraction_array = json.loads(content)
+
+            # Handle case where LLM returns object instead of array
+            if isinstance(extraction_array, dict):
+                extraction_array = [extraction_array]
+
+            # Process array to separate visa and general content
+            visa = None
+            general_content = None
+
+            for item in extraction_array:
+                item_type = item.get('type', '').lower()
+                data = item.get('data', {})
+
+                if item_type == 'visa' and data.get('visa_type'):
+                    # Create Visa model
+                    visa = self._create_visa_model(data, page)
+
+                elif item_type == 'general' and data.get('content_type'):
+                    # Create GeneralContent model
+                    general_content = self._create_general_content_model(data, page)
+
+            return visa, general_content
+
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Failed to parse JSON: {e}")
+            return None, None
+        except Exception as e:
+            self.logger.error(f"LLM dual extraction failed: {e}")
+            return None, None
 
     def _extract_with_llm(self, text: str, country: str) -> Optional[Dict]:
-        """Use LLM to extract visa information using configurable schema"""
+        """
+        Use LLM to extract visa information using configurable schema (legacy method).
+        Kept for backward compatibility - use _extract_with_llm_dual() for new code.
+        """
         # Get extraction schema from config
         schema_config = self.config.get('extraction_schema')
 
@@ -253,4 +340,18 @@ Return ONLY valid JSON, no other text."""
             processing_time=data.get('processing_time', ''),
             documents_required=data.get('documents_required', []),
             source_urls=[page.url]
+        )
+
+    def _create_general_content_model(self, data: Dict, page: CrawledPage) -> GeneralContent:
+        """Convert extracted data to GeneralContent model"""
+        return GeneralContent(
+            country=page.country,
+            title=data.get('title', page.title or 'Immigration Information'),
+            content_type=data.get('content_type', 'overview'),
+            summary=data.get('summary', ''),
+            key_points=data.get('key_points', []),
+            content=data.get('content', ''),
+            application_links=data.get('application_links', []),
+            source_url=page.url,
+            metadata=data.get('metadata', {})
         )

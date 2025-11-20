@@ -275,6 +275,7 @@ with tab2:
                 import os
                 logs = []
                 all_visas = []
+                all_general_content = []
                 # Use dict for mutable state tracking
                 state = {'total_pages': 0, 'pages_processed': 0}
 
@@ -326,7 +327,7 @@ with tab2:
 
                     def on_visa_found(visa_data):
                         all_visas.append(visa_data)
-                        logs.append(f"[SUCCESS] ✅ Extracted: {visa_data.get('visa_type', 'Unknown')}")
+                        logs.append(f"[SUCCESS] ✅ Visa: {visa_data.get('visa_type', 'Unknown')}")
                         log_area.code('\n'.join(logs[-25:]))
 
                         # Show LLM response if debug mode
@@ -336,23 +337,43 @@ with tab2:
                                 st.json(visa_data)
                                 st.markdown("---")
 
-                        status_text.text(f"Processing... ({state['pages_processed']}/{state['total_pages']} pages, {len(all_visas)} visas found)")
+                        total_extracted = len(all_visas) + len(all_general_content)
+                        status_text.text(f"Processing... ({state['pages_processed']}/{state['total_pages']} pages, {total_extracted} items found)")
+
+                    def on_general_found(content_data):
+                        all_general_content.append(content_data)
+                        logs.append(f"[SUCCESS] ✅ General: {content_data.get('title', 'Unknown')[:50]}")
+                        log_area.code('\n'.join(logs[-25:]))
+
+                        # Show LLM response if debug mode
+                        if config['show_llm_response']:
+                            with llm_response_container:
+                                st.markdown(f"**General Content {len(all_general_content)}: {content_data.get('title', 'Unknown')}**")
+                                st.json(content_data)
+                                st.markdown("---")
+
+                        total_extracted = len(all_visas) + len(all_general_content)
+                        status_text.text(f"Processing... ({state['pages_processed']}/{state['total_pages']} pages, {total_extracted} items found)")
 
                     def on_complete(result):
                         progress_bar.progress(1.0)
 
                         visas_count = result.get('visas_extracted', len(all_visas))
+                        general_count = result.get('general_content_extracted', len(all_general_content))
                         pages_count = result.get('pages_processed', state['pages_processed'])
+                        total_extracted = visas_count + general_count
 
                         logs.append(f"\n[SUCCESS] ==================== COMPLETED ====================")
                         logs.append(f"[INFO] Pages processed: {pages_count}")
                         logs.append(f"[INFO] Visas extracted: {visas_count}")
+                        logs.append(f"[INFO] General content extracted: {general_count}")
+                        logs.append(f"[INFO] Total items extracted: {total_extracted}")
                         if pages_count > 0:
-                            logs.append(f"[INFO] Success rate: {(visas_count/pages_count*100):.1f}%")
+                            logs.append(f"[INFO] Success rate: {(total_extracted/pages_count*100):.1f}%")
                         logs.append(f"[INFO] Data saved to database with versioning")
                         log_area.code('\n'.join(logs))
 
-                        status_text.text(f"✅ Completed! Processed {pages_count} pages, extracted {visas_count} visas")
+                        status_text.text(f"✅ Completed! Processed {pages_count} pages, extracted {visas_count} visas + {general_count} general content")
 
                     def on_error(error_msg):
                         logs.append(f"[ERROR] ❌ {error_msg[:100]}")
@@ -365,6 +386,7 @@ with tab2:
                         on_start=on_start,
                         on_page=on_page,
                         on_visa_found=on_visa_found,
+                        on_general_found=on_general_found,
                         on_complete=on_complete,
                         on_error=on_error
                     )
@@ -373,12 +395,15 @@ with tab2:
                     st.session_state['classifier_results'] = {
                         'pages_processed': result.get('pages_processed', state['pages_processed']),
                         'visas_extracted': result.get('visas_extracted', len(all_visas)),
+                        'general_content_extracted': result.get('general_content_extracted', len(all_general_content)),
                         'visas': all_visas,
+                        'general_content': all_general_content,
                         'status': 'completed',
                         'model_used': config['model']
                     }
 
-                    st.success(f"✅ Classification completed! Extracted {len(all_visas)} visas from {result.get('pages_processed', 0)} pages")
+                    total_extracted = len(all_visas) + len(all_general_content)
+                    st.success(f"✅ Classification completed! Extracted {total_extracted} items ({len(all_visas)} visas + {len(all_general_content)} general content) from {result.get('pages_processed', 0)} pages")
                     st.info("📊 View results in the **Results** tab →")
 
                 except Exception as e:
@@ -394,34 +419,40 @@ with tab3:
     # Create sub-tabs for current run vs database view
     results_tab1, results_tab2 = st.tabs(["💾 Database View", "🔄 Current Run"])
 
-    # TAB 3.1: Database View (All Classified Visas)
+    # TAB 3.1: Database View (All Classified Data)
     with results_tab1:
-        st.markdown("### All Classified Visas in Database")
+        st.markdown("### All Classified Data in Database")
 
         from shared.database import Database
         import pandas as pd
 
         db = Database()
-        visas = db.get_visas()
 
-        if not visas:
-            st.warning("⚠️ No visas in database yet. Run the classifier first.")
-        else:
-            # Summary metrics
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Visas", len(visas))
-            with col2:
-                countries = set(v.country for v in visas)
-                st.metric("Countries", len(countries))
-            with col3:
-                categories = [v.category for v in visas if v.category]
-                st.metric("Categories", len(set(categories)))
-            with col4:
-                unclassified_pages = len(db.get_unclassified_pages())
-                st.metric("Unclassified Pages", unclassified_pages)
+        # Create sub-tabs for Visas and General Content
+        db_subtab1, db_subtab2 = st.tabs(["📋 Visas", "📖 General Content"])
 
-            st.markdown("---")
+        # SUB-TAB 1: Visas
+        with db_subtab1:
+            visas = db.get_visas()
+
+            if not visas:
+                st.warning("⚠️ No visas in database yet. Run the classifier first.")
+            else:
+                # Summary metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Visas", len(visas))
+                with col2:
+                    countries = set(v.country for v in visas)
+                    st.metric("Countries", len(countries))
+                with col3:
+                    categories = [v.category for v in visas if v.category]
+                    st.metric("Categories", len(set(categories)))
+                with col4:
+                    unclassified_pages = len(db.get_unclassified_pages())
+                    st.metric("Unclassified Pages", unclassified_pages)
+
+                st.markdown("---")
 
             # Filters
             col1, col2, col3 = st.columns(3)
@@ -545,16 +576,186 @@ with tab3:
                 if len(filtered_visas) > 20:
                     st.info(f"ℹ️ Showing first 20 of {len(filtered_visas)} visas. Use Table or Cards view to see all.")
 
-            # Export all filtered data
-            st.markdown("---")
-            export_data = json.dumps([v.to_dict() for v in filtered_visas], indent=2)
-            st.download_button(
-                "📥 Download All Filtered Visas as JSON",
-                data=export_data,
-                file_name="classified_visas_all.json",
-                mime="application/json",
-                key="db_export_json"
-            )
+                # Export all filtered data
+                st.markdown("---")
+                export_data = json.dumps([v.to_dict() for v in filtered_visas], indent=2)
+                st.download_button(
+                    "📥 Download All Filtered Visas as JSON",
+                    data=export_data,
+                    file_name="classified_visas_all.json",
+                    mime="application/json",
+                    key="db_export_json"
+                )
+
+        # SUB-TAB 2: General Content
+        with db_subtab2:
+            general_content_list = db.get_general_content()
+
+            if not general_content_list:
+                st.warning("⚠️ No general content in database yet. Run the classifier first.")
+            else:
+                # Summary metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Content", len(general_content_list))
+                with col2:
+                    countries = set(gc.country for gc in general_content_list)
+                    st.metric("Countries", len(countries))
+                with col3:
+                    content_types = [gc.content_type for gc in general_content_list if gc.content_type]
+                    st.metric("Content Types", len(set(content_types)))
+                with col4:
+                    audiences = [gc.audience for gc in general_content_list if gc.audience]
+                    st.metric("Audiences", len(set(audiences)))
+
+                st.markdown("---")
+
+                # Filters
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    country_filter = st.selectbox(
+                        "Filter by Country",
+                        ["All"] + sorted(list(countries)),
+                        key="db_country_filter_gc"
+                    )
+                with col2:
+                    type_filter = st.selectbox(
+                        "Filter by Content Type",
+                        ["All"] + sorted(list(set(content_types))),
+                        key="db_type_filter_gc"
+                    )
+                with col3:
+                    search_term = st.text_input("Search Title", "", key="db_search_gc")
+
+                # Apply filters
+                filtered_content = general_content_list
+                if country_filter != "All":
+                    filtered_content = [gc for gc in filtered_content if gc.country == country_filter]
+                if type_filter != "All":
+                    filtered_content = [gc for gc in filtered_content if gc.content_type == type_filter]
+                if search_term:
+                    filtered_content = [gc for gc in filtered_content if search_term.lower() in gc.title.lower()]
+
+                st.markdown(f"**Showing {len(filtered_content)} of {len(general_content_list)} content items**")
+
+                # Display options
+                view_mode = st.radio("View Mode", ["Cards", "Table", "Detailed"], horizontal=True, key="db_view_mode_gc")
+
+                if view_mode == "Cards":
+                    # Card view with pagination
+                    items_per_page = 10
+                    total_pages = (len(filtered_content) + items_per_page - 1) // items_per_page
+
+                    page = st.number_input("Page", min_value=1, max_value=max(1, total_pages), value=1, key="db_page_gc")
+                    start_idx = (page - 1) * items_per_page
+                    end_idx = start_idx + items_per_page
+                    page_items = filtered_content[start_idx:end_idx]
+
+                    for content in page_items:
+                        with st.expander(f"📖 {content.title[:80]} ({content.country.title()})"):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"**Type:** {content.content_type.title()}")
+                                st.write(f"**Audience:** {content.audience.title()}")
+                                st.write(f"**Difficulty:** {content.difficulty.title()}")
+                            with col2:
+                                st.write(f"**Key Points:** {len(content.key_points)}")
+                                st.write(f"**Application Links:** {len(content.application_links)}")
+                                if content.created_at:
+                                    st.write(f"**Classified:** {content.created_at[:10]}")
+
+                            # Show summary
+                            st.markdown("**Summary:**")
+                            st.write(content.summary)
+
+                            # Show key points
+                            if content.key_points:
+                                st.markdown("**Key Points:**")
+                                for point in content.key_points:
+                                    st.write(f"- {point}")
+
+                            # Show application links
+                            if content.application_links:
+                                st.markdown("**Application Links:**")
+                                for link in content.application_links:
+                                    st.markdown(f"- [{link.get('label', 'Link')}]({link.get('url', '#')})")
+
+                            # Show full details
+                            if st.checkbox(f"Show Full Content", key=f"details_gc_{content.id}"):
+                                st.markdown("**Full Content:**")
+                                st.text_area("Content", content.content, height=300, key=f"content_gc_{content.id}")
+
+                    st.caption(f"Page {page} of {total_pages}")
+
+                elif view_mode == "Table":
+                    # Create DataFrame for table view
+                    table_data = []
+                    for content in filtered_content:
+                        table_data.append({
+                            'Title': content.title[:60] + '...' if len(content.title) > 60 else content.title,
+                            'Country': content.country.title(),
+                            'Type': content.content_type.title(),
+                            'Audience': content.audience.title(),
+                            'Key Points': len(content.key_points),
+                            'Links': len(content.application_links)
+                        })
+
+                    if table_data:
+                        df = pd.DataFrame(table_data)
+                        st.dataframe(df, use_container_width=True, height=400)
+
+                        # Export
+                        csv = df.to_csv(index=False)
+                        st.download_button(
+                            "📥 Download Table as CSV",
+                            data=csv,
+                            file_name="general_content.csv",
+                            mime="text/csv",
+                            key="gc_csv_download"
+                        )
+
+                else:  # Detailed view
+                    for i, content in enumerate(filtered_content[:10], 1):  # Limit to 10 for detailed view
+                        st.markdown(f"### {i}. {content.title}")
+                        st.markdown(f"**Country:** {content.country.title()} | **Type:** {content.content_type.title()} | **Audience:** {content.audience.title()}")
+
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown("#### Summary")
+                            st.write(content.summary)
+
+                            st.markdown("#### Key Points")
+                            for point in content.key_points:
+                                st.write(f"- {point}")
+
+                        with col2:
+                            st.markdown("#### Metadata")
+                            st.write(f"**Difficulty:** {content.difficulty}")
+                            st.write(f"**Topics:** {', '.join(content.topics)}")
+
+                            if content.application_links:
+                                st.markdown("#### Application Links")
+                                for link in content.application_links:
+                                    st.markdown(f"- [{link.get('label', 'Link')}]({link.get('url', '#')})")
+
+                        with st.expander("📄 Full Content"):
+                            st.write(content.content)
+
+                        st.markdown("---")
+
+                    if len(filtered_content) > 10:
+                        st.info(f"ℹ️ Showing first 10 of {len(filtered_content)} items. Use Cards view to see all.")
+
+                # Export all filtered data
+                st.markdown("---")
+                export_data = json.dumps([gc.to_dict() for gc in filtered_content], indent=2)
+                st.download_button(
+                    "📥 Download All Filtered Content as JSON",
+                    data=export_data,
+                    file_name="general_content_all.json",
+                    mime="application/json",
+                    key="db_export_json_gc"
+                )
 
     # TAB 3.2: Current Run Results
     with results_tab2:
@@ -562,43 +763,86 @@ with tab3:
             results = st.session_state['classifier_results']
 
             # Summary metrics
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
                 st.metric("Pages Processed", results['pages_processed'])
             with col2:
                 st.metric("Visas Extracted", results['visas_extracted'])
             with col3:
-                success_rate = (results['visas_extracted'] / results['pages_processed'] * 100) if results['pages_processed'] > 0 else 0
-                st.metric("Success Rate", f"{success_rate:.1f}%")
+                general_count = results.get('general_content_extracted', 0)
+                st.metric("General Content", general_count)
             with col4:
+                total_extracted = results['visas_extracted'] + general_count
+                success_rate = (total_extracted / results['pages_processed'] * 100) if results['pages_processed'] > 0 else 0
+                st.metric("Success Rate", f"{success_rate:.1f}%")
+            with col5:
                 st.metric("Model Used", results['model_used'].split('/')[-1][:15])
 
             st.markdown("---")
 
+            # Create sub-tabs for visas and general content
+            run_subtab1, run_subtab2 = st.tabs(["📋 Visas", "📖 General Content"])
+
             # Show visas
-            if results['visas']:
-                st.markdown(f"### Extracted Visas This Run ({len(results['visas'])})")
+            with run_subtab1:
+                if results.get('visas'):
+                    st.markdown(f"### Extracted Visas This Run ({len(results['visas'])})")
 
-                for i, visa in enumerate(results['visas'], 1):
-                    with st.expander(f"{i}. {visa.get('visa_type', 'Unknown')} ({visa.get('category', 'unknown')})"):
-                        st.json(visa)
+                    for i, visa in enumerate(results['visas'], 1):
+                        with st.expander(f"{i}. {visa.get('visa_type', 'Unknown')} ({visa.get('category', 'unknown')})"):
+                            st.json(visa)
 
-                # Export button
-                st.markdown("---")
-                export_data = json.dumps(results['visas'], indent=2)
-                st.download_button(
-                    "📥 Download This Run as JSON",
-                    data=export_data,
-                    file_name=f"classified_visas_run_{results['model_used'].replace('/', '_')}.json",
-                    mime="application/json",
-                    key="run_export_json"
-                )
-            else:
-                st.warning("⚠️ No visas were extracted in this run. Check the logs for details.")
+                    # Export button
+                    st.markdown("---")
+                    export_data = json.dumps(results['visas'], indent=2)
+                    st.download_button(
+                        "📥 Download Visas from This Run as JSON",
+                        data=export_data,
+                        file_name=f"classified_visas_run_{results['model_used'].replace('/', '_')}.json",
+                        mime="application/json",
+                        key="run_export_json_visas"
+                    )
+                else:
+                    st.warning("⚠️ No visas were extracted in this run.")
+
+            # Show general content
+            with run_subtab2:
+                if results.get('general_content'):
+                    st.markdown(f"### Extracted General Content This Run ({len(results['general_content'])})")
+
+                    for i, content in enumerate(results['general_content'], 1):
+                        with st.expander(f"{i}. {content.get('title', 'Unknown')[:80]} ({content.get('content_type', 'unknown')})"):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"**Type:** {content.get('content_type', 'N/A').title()}")
+                                st.write(f"**Audience:** {content.get('metadata', {}).get('audience', 'N/A').title()}")
+                                st.write(f"**Difficulty:** {content.get('metadata', {}).get('difficulty', 'N/A').title()}")
+                            with col2:
+                                st.write(f"**Key Points:** {len(content.get('key_points', []))}")
+                                st.write(f"**Application Links:** {len(content.get('application_links', []))}")
+
+                            st.markdown("**Summary:**")
+                            st.write(content.get('summary', 'N/A'))
+
+                            if st.checkbox(f"Show Full Data", key=f"run_gc_{i}"):
+                                st.json(content)
+
+                    # Export button
+                    st.markdown("---")
+                    export_data = json.dumps(results['general_content'], indent=2)
+                    st.download_button(
+                        "📥 Download General Content from This Run as JSON",
+                        data=export_data,
+                        file_name=f"general_content_run_{results['model_used'].replace('/', '_')}.json",
+                        mime="application/json",
+                        key="run_export_json_gc"
+                    )
+                else:
+                    st.warning("⚠️ No general content was extracted in this run.")
 
             st.markdown("---")
             st.info("""
-            **💡 Tip:** Switch to the **Database View** tab to see ALL classified visas, not just this run.
+            **💡 Tip:** Switch to the **Database View** tab to see ALL classified data, not just this run.
             """)
 
         else:

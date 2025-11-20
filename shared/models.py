@@ -164,6 +164,119 @@ class Visa:
         )
 
 
+# ============ GENERAL CONTENT ============
+
+@dataclass
+class GeneralContent:
+    """
+    General immigration information (not visa-specific).
+
+    Stores guides, FAQs, processes, requirements, timelines, and overviews
+    extracted from immigration websites to provide comprehensive context
+    for answering broad immigration questions.
+    """
+    # Required fields
+    country: str
+    title: str
+    content_type: str  # guide, faq, process, requirements, timeline, overview
+
+    # Content fields
+    summary: str = ""
+    key_points: List[str] = field(default_factory=list)
+    content: str = ""
+
+    # Links and sources
+    application_links: List[Dict[str, str]] = field(default_factory=list)  # [{"title": "Apply here", "url": "..."}]
+    source_url: str = ""
+
+    # Metadata
+    metadata: Dict = field(default_factory=dict)  # audience, difficulty, topics, etc.
+
+    # Database fields
+    id: Optional[int] = None
+    version: int = 1
+    created_at: Optional[str] = None
+
+    @classmethod
+    def from_db_row(cls, row: dict) -> 'GeneralContent':
+        """
+        Create GeneralContent from database row.
+
+        Automatically parses JSON fields.
+
+        Args:
+            row: Dictionary from database query
+
+        Returns:
+            GeneralContent object with all fields populated
+        """
+        def parse_json(value, default):
+            """Parse JSON string or return as-is if already parsed"""
+            if isinstance(value, str):
+                try:
+                    return json.loads(value) if value else default
+                except json.JSONDecodeError:
+                    return default
+            return value if value else default
+
+        return cls(
+            id=row.get('id'),
+            country=row.get('country', ''),
+            title=row.get('title', ''),
+            content_type=row.get('content_type', ''),
+            summary=row.get('summary', ''),
+            key_points=parse_json(row.get('key_points'), []),
+            content=row.get('content', ''),
+            application_links=parse_json(row.get('application_links'), []),
+            source_url=row.get('source_url', ''),
+            metadata=parse_json(row.get('metadata'), {}),
+            version=row.get('version', 1),
+            created_at=row.get('created_at')
+        )
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'country': self.country,
+            'title': self.title,
+            'content_type': self.content_type,
+            'summary': self.summary,
+            'key_points': self.key_points,
+            'content': self.content,
+            'application_links': self.application_links,
+            'source_url': self.source_url,
+            'metadata': self.metadata,
+            'version': self.version,
+            'created_at': self.created_at
+        }
+
+    @property
+    def audience(self) -> str:
+        """Get target audience"""
+        return self.metadata.get('audience', 'general')
+
+    @property
+    def difficulty(self) -> str:
+        """Get difficulty level"""
+        return self.metadata.get('difficulty', 'beginner')
+
+    @property
+    def topics(self) -> List[str]:
+        """Get related topics/tags"""
+        return self.metadata.get('topics', [])
+
+    def matches_query(self, query: str) -> bool:
+        """Check if general content matches a search query"""
+        query_lower = query.lower()
+        return (
+            query_lower in self.title.lower() or
+            query_lower in self.summary.lower() or
+            query_lower in self.content_type.lower() or
+            any(query_lower in point.lower() for point in self.key_points)
+        )
+
+
 # ============ CRAWLED PAGE ============
 
 @dataclass
