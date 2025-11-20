@@ -454,127 +454,127 @@ with tab3:
 
                 st.markdown("---")
 
-            # Filters
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                country_filter = st.selectbox(
-                    "Filter by Country",
-                    ["All"] + sorted(list(countries)),
-                    key="db_country_filter"
-                )
-            with col2:
-                category_filter = st.selectbox(
-                    "Filter by Category",
-                    ["All"] + sorted(list(set(categories))),
-                    key="db_category_filter"
-                )
-            with col3:
-                search_term = st.text_input("Search Visa Type", "", key="db_search")
-
-            # Apply filters
-            filtered_visas = visas
-            if country_filter != "All":
-                filtered_visas = [v for v in filtered_visas if v.country == country_filter]
-            if category_filter != "All":
-                filtered_visas = [v for v in filtered_visas if v.category == category_filter]
-            if search_term:
-                filtered_visas = [v for v in filtered_visas if search_term.lower() in v.visa_type.lower()]
-
-            st.markdown(f"**Showing {len(filtered_visas)} of {len(visas)} visas**")
-
-            # Display options
-            view_mode = st.radio("View Mode", ["Table", "Cards", "Detailed"], horizontal=True, key="db_view_mode")
-
-            if view_mode == "Table":
-                # Create DataFrame for table view
-                table_data = []
-                for visa in filtered_visas:
-                    table_data.append({
-                        'Visa Type': visa.visa_type,
-                        'Country': visa.country.title(),
-                        'Category': visa.category.title() if visa.category else 'Unknown',
-                        'Age': visa.age_range,
-                        'Processing Time': visa.processing_time or 'N/A',
-                        'Fee': visa.application_fee or 'N/A'
-                    })
-
-                if table_data:
-                    df = pd.DataFrame(table_data)
-                    st.dataframe(df, use_container_width=True, height=400)
-
-                    # Export
-                    csv = df.to_csv(index=False)
-                    st.download_button(
-                        "📥 Download Table as CSV",
-                        data=csv,
-                        file_name="classified_visas.csv",
-                        mime="text/csv"
+                # Filters
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    country_filter = st.selectbox(
+                        "Filter by Country",
+                        ["All"] + sorted(list(countries)),
+                        key="db_country_filter"
                     )
+                with col2:
+                    category_filter = st.selectbox(
+                        "Filter by Category",
+                        ["All"] + sorted(list(set(categories))),
+                        key="db_category_filter"
+                    )
+                with col3:
+                    search_term = st.text_input("Search Visa Type", "", key="db_search")
 
-            elif view_mode == "Cards":
-                # Card view with pagination
-                items_per_page = 10
-                total_pages = (len(filtered_visas) + items_per_page - 1) // items_per_page
+                # Apply filters
+                filtered_visas = visas
+                if country_filter != "All":
+                    filtered_visas = [v for v in filtered_visas if v.country == country_filter]
+                if category_filter != "All":
+                    filtered_visas = [v for v in filtered_visas if v.category == category_filter]
+                if search_term:
+                    filtered_visas = [v for v in filtered_visas if search_term.lower() in v.visa_type.lower()]
 
-                page = st.number_input("Page", min_value=1, max_value=max(1, total_pages), value=1, key="db_page")
-                start_idx = (page - 1) * items_per_page
-                end_idx = start_idx + items_per_page
-                page_visas = filtered_visas[start_idx:end_idx]
+                st.markdown(f"**Showing {len(filtered_visas)} of {len(visas)} visas**")
 
-                for visa in page_visas:
-                    with st.expander(f"🎫 {visa.visa_type} ({visa.country.title()})"):
+                # Display options
+                view_mode = st.radio("View Mode", ["Table", "Cards", "Detailed"], horizontal=True, key="db_view_mode")
+
+                if view_mode == "Table":
+                    # Create DataFrame for table view
+                    table_data = []
+                    for visa in filtered_visas:
+                        table_data.append({
+                            'Visa Type': visa.visa_type,
+                            'Country': visa.country.title(),
+                            'Category': visa.category.title() if visa.category else 'Unknown',
+                            'Age': visa.age_range,
+                            'Processing Time': visa.processing_time or 'N/A',
+                            'Fee': visa.application_fee or 'N/A'
+                        })
+
+                    if table_data:
+                        df = pd.DataFrame(table_data)
+                        st.dataframe(df, use_container_width=True, height=400)
+
+                        # Export
+                        csv = df.to_csv(index=False)
+                        st.download_button(
+                            "📥 Download Table as CSV",
+                            data=csv,
+                            file_name="classified_visas.csv",
+                            mime="text/csv"
+                        )
+
+                elif view_mode == "Cards":
+                    # Card view with pagination
+                    items_per_page = 10
+                    total_pages = (len(filtered_visas) + items_per_page - 1) // items_per_page
+
+                    page = st.number_input("Page", min_value=1, max_value=max(1, total_pages), value=1, key="db_page")
+                    start_idx = (page - 1) * items_per_page
+                    end_idx = start_idx + items_per_page
+                    page_visas = filtered_visas[start_idx:end_idx]
+
+                    for visa in page_visas:
+                        with st.expander(f"🎫 {visa.visa_type} ({visa.country.title()})"):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"**Category:** {visa.category.title() if visa.category else 'Unknown'}")
+                                st.write(f"**Age Requirement:** {visa.age_range}")
+                                st.write(f"**Processing Time:** {visa.processing_time or 'Not specified'}")
+                            with col2:
+                                st.write(f"**Application Fee:** {visa.application_fee or 'Not specified'}")
+                                st.write(f"**Source URLs:** {len(visa.source_urls)}")
+                                if visa.created_at:
+                                    st.write(f"**Classified:** {visa.created_at[:10]}")
+
+                            # Show full details
+                            if st.checkbox(f"Show Full Details", key=f"details_{visa.id}"):
+                                st.json(visa.to_dict())
+
+                    st.caption(f"Page {page} of {total_pages}")
+
+                else:  # Detailed view
+                    for i, visa in enumerate(filtered_visas[:20], 1):  # Limit to 20 for detailed view
+                        st.markdown(f"### {i}. {visa.visa_type}")
+                        st.markdown(f"**Country:** {visa.country.title()} | **Category:** {visa.category.title() if visa.category else 'Unknown'}")
+
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.write(f"**Category:** {visa.category.title() if visa.category else 'Unknown'}")
-                            st.write(f"**Age Requirement:** {visa.age_range}")
-                            st.write(f"**Processing Time:** {visa.processing_time or 'Not specified'}")
+                            st.markdown("#### Requirements")
+                            if visa.requirements:
+                                for key, value in visa.requirements.items():
+                                    if value:
+                                        st.write(f"- **{key.replace('_', ' ').title()}:** {value}")
+                            else:
+                                st.write("No requirements listed")
+
                         with col2:
-                            st.write(f"**Application Fee:** {visa.application_fee or 'Not specified'}")
-                            st.write(f"**Source URLs:** {len(visa.source_urls)}")
-                            if visa.created_at:
-                                st.write(f"**Classified:** {visa.created_at[:10]}")
+                            st.markdown("#### Fees & Processing")
+                            if visa.fees:
+                                for key, value in visa.fees.items():
+                                    if value:
+                                        st.write(f"- **{key.replace('_', ' ').title()}:** {value}")
+                            else:
+                                st.write("No fees listed")
 
-                        # Show full details
-                        if st.checkbox(f"Show Full Details", key=f"details_{visa.id}"):
-                            st.json(visa.to_dict())
+                            st.write(f"**Processing Time:** {visa.processing_time or 'Not specified'}")
 
-                st.caption(f"Page {page} of {total_pages}")
+                        if visa.documents_required:
+                            st.markdown("#### Documents Required")
+                            for doc in visa.documents_required:
+                                st.write(f"- {doc}")
 
-            else:  # Detailed view
-                for i, visa in enumerate(filtered_visas[:20], 1):  # Limit to 20 for detailed view
-                    st.markdown(f"### {i}. {visa.visa_type}")
-                    st.markdown(f"**Country:** {visa.country.title()} | **Category:** {visa.category.title() if visa.category else 'Unknown'}")
+                        st.markdown("---")
 
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.markdown("#### Requirements")
-                        if visa.requirements:
-                            for key, value in visa.requirements.items():
-                                if value:
-                                    st.write(f"- **{key.replace('_', ' ').title()}:** {value}")
-                        else:
-                            st.write("No requirements listed")
-
-                    with col2:
-                        st.markdown("#### Fees & Processing")
-                        if visa.fees:
-                            for key, value in visa.fees.items():
-                                if value:
-                                    st.write(f"- **{key.replace('_', ' ').title()}:** {value}")
-                        else:
-                            st.write("No fees listed")
-
-                        st.write(f"**Processing Time:** {visa.processing_time or 'Not specified'}")
-
-                    if visa.documents_required:
-                        st.markdown("#### Documents Required")
-                        for doc in visa.documents_required:
-                            st.write(f"- {doc}")
-
-                    st.markdown("---")
-
-                if len(filtered_visas) > 20:
-                    st.info(f"ℹ️ Showing first 20 of {len(filtered_visas)} visas. Use Table or Cards view to see all.")
+                    if len(filtered_visas) > 20:
+                        st.info(f"ℹ️ Showing first 20 of {len(filtered_visas)} visas. Use Table or Cards view to see all.")
 
                 # Export all filtered data
                 st.markdown("---")
