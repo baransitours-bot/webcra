@@ -64,8 +64,10 @@ class AssistantService:
             Statistics dictionary
         """
         visa_count = self.repo.get_visa_count()
+        general_content_count = self.repo.get_general_content_count()
         return {
             'total_visas': visa_count,
+            'total_general_content': general_content_count,
             'ready': visa_count > 0 and self.engine.llm_client is not None,
             'llm_available': self.engine.llm_client is not None
         }

@@ -94,21 +94,21 @@ class AssistantEngine:
             }
 
         try:
-            # Step 1: Retrieve relevant visas
-            relevant_visas = self.retriever.retrieve_relevant_visas(
+            # Step 1: Retrieve both visas and general content
+            relevant_visas, relevant_general_content = self.retriever.retrieve_all_context(
                 question,
                 user_profile
             )
 
-            if not relevant_visas:
+            if not relevant_visas and not relevant_general_content:
                 return {
-                    'answer': "I couldn't find any relevant visa information for your question. Try rephrasing or asking about a specific country.",
+                    'answer': "I couldn't find any relevant information for your question. Try rephrasing or asking about immigration, visas, employment, benefits, or services.",
                     'sources': [],
                     'error': False
                 }
 
-            # Step 2: Format context for LLM
-            context = self.retriever.format_context_for_llm(relevant_visas)
+            # Step 2: Format context for LLM (includes both visas and general content)
+            context = self.retriever.format_context_for_llm(relevant_visas, relevant_general_content)
 
             # Step 3: Build LLM prompt
             system_prompt = self._build_system_prompt()
@@ -132,8 +132,8 @@ class AssistantEngine:
             if len(self.conversation_history) > max_history:
                 self.conversation_history = self.conversation_history[-max_history:]
 
-            # Step 6: Extract sources
-            sources = self._extract_sources(relevant_visas)
+            # Step 6: Extract sources from both visas and general content
+            sources = self._extract_sources(relevant_visas, relevant_general_content)
 
             return {
                 'answer': answer,
@@ -151,25 +151,28 @@ class AssistantEngine:
 
     def _build_system_prompt(self) -> str:
         """Build system prompt for LLM"""
-        return """You are an expert immigration assistant helping people understand visa requirements and options.
+        return """You are an expert immigration assistant helping people understand visa requirements, immigration options, and life in new countries.
 
 Your role:
 - Answer questions about visa requirements clearly and accurately
-- Use ONLY the information provided in the context
+- Provide information about employment, healthcare, benefits, and settlement services
+- Use ONLY the information provided in the context (both visa programs and general information)
 - If information is not in the context, say "I don't have that information"
 - Be specific about requirements (age, education, fees, processing time)
 - Provide practical advice when appropriate
+- Include application links when available
 
 Guidelines:
 - Be friendly and professional
 - Use bullet points for clarity
-- Cite specific visa types when relevant
+- Cite specific visa types and information sources when relevant
 - Don't make assumptions or guess
-- If asked about multiple countries, compare them clearly"""
+- If asked about multiple countries, compare them clearly
+- For questions about employment, healthcare, benefits, or services, use the general information provided"""
 
     def _build_user_message(self, question: str, context: str, user_profile: Dict = None) -> str:
         """Build user message with context"""
-        message = f"""Context (Visa Information):
+        message = f"""Context Information:
 {context}
 
 """
@@ -185,16 +188,31 @@ Guidelines:
 
         return message
 
-    def _extract_sources(self, visas: List[Dict]) -> List[Dict]:
-        """Extract source URLs from visas"""
+    def _extract_sources(self, visas: List[Dict], general_content: List[Dict] = None) -> List[Dict]:
+        """Extract source URLs from visas and general content"""
         sources = []
+
+        # Extract visa sources
         for visa in visas:
             if visa.get('source_urls'):
                 sources.append({
-                    'visa_type': visa['visa_type'],
+                    'type': 'visa',
+                    'title': visa['visa_type'],
                     'country': visa['country'],
                     'url': visa['source_urls'][0]
                 })
+
+        # Extract general content sources
+        if general_content:
+            for content in general_content:
+                if content.get('source_url'):
+                    sources.append({
+                        'type': 'general',
+                        'title': content['title'],
+                        'country': content['country'],
+                        'url': content['source_url']
+                    })
+
         return sources
 
     def reset_conversation(self):
