@@ -89,6 +89,31 @@ class Database:
                 ON visas(country, is_latest)
             """)
 
+            # General immigration content (guides, FAQs, processes) with versioning
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS general_content (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    country TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    content_type TEXT NOT NULL,
+                    summary TEXT,
+                    key_points TEXT,
+                    content TEXT,
+                    application_links TEXT,
+                    source_url TEXT,
+                    metadata TEXT,
+                    version INTEGER DEFAULT 1,
+                    is_latest BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(title, country, version)
+                )
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_general_content_latest
+                ON general_content(country, content_type, is_latest)
+            """)
+
             # Clients
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS clients (
@@ -385,6 +410,118 @@ class Database:
             rows = [dict(row) for row in cursor.fetchall()]
             return load_visas_from_rows(rows)
 
+    # ============ GENERAL CONTENT ============
+
+    def save_general_content(
+        self,
+        country: str,
+        title: str,
+        content_type: str,
+        summary: str,
+        key_points: List[str],
+        content: str,
+        application_links: List[Dict[str, str]],
+        source_url: str,
+        metadata: Dict
+    ) -> int:
+        """
+        Save general immigration content with versioning.
+
+        Args:
+            country: Country this content is about
+            title: Content title
+            content_type: Type (guide, faq, process, requirements, timeline, overview)
+            summary: Brief summary
+            key_points: List of key takeaways
+            content: Full content
+            application_links: List of application links with titles
+            source_url: Source page URL
+            metadata: Additional metadata (audience, difficulty, topics)
+
+        Returns:
+            Content ID
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Check for existing versions
+            cursor.execute("""
+                SELECT MAX(version) as max_version
+                FROM general_content
+                WHERE title = ? AND country = ?
+            """, (title, country))
+
+            result = cursor.fetchone()
+            new_version = (result['max_version'] or 0) + 1
+
+            # Mark old versions as not latest
+            if new_version > 1:
+                cursor.execute("""
+                    UPDATE general_content
+                    SET is_latest = 0
+                    WHERE title = ? AND country = ?
+                """, (title, country))
+
+            # Insert new version
+            cursor.execute("""
+                INSERT INTO general_content
+                (country, title, content_type, summary, key_points, content,
+                 application_links, source_url, metadata, version, is_latest)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            """, (
+                country,
+                title,
+                content_type,
+                summary,
+                json.dumps(key_points),
+                content,
+                json.dumps(application_links),
+                source_url,
+                json.dumps(metadata),
+                new_version
+            ))
+
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_general_content(
+        self,
+        country: Optional[str] = None,
+        content_type: Optional[str] = None
+    ) -> List['GeneralContent']:
+        """
+        Get general content as GeneralContent model objects.
+
+        Args:
+            country: Optional country filter
+            content_type: Optional content type filter (guide, faq, etc.)
+
+        Returns:
+            List of GeneralContent objects
+        """
+        from shared.models import GeneralContent
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            query = "SELECT * FROM general_content WHERE is_latest = 1"
+            params = []
+
+            if country:
+                query += " AND country = ?"
+                params.append(country)
+
+            if content_type:
+                query += " AND content_type = ?"
+                params.append(content_type)
+
+            query += " ORDER BY created_at DESC"
+
+            cursor.execute(query, params)
+
+            rows = [dict(row) for row in cursor.fetchall()]
+            return [GeneralContent.from_db_row(row) for row in rows]
+
     def get_pages(self, country: Optional[str] = None) -> List[CrawledPage]:
         """
         Get crawled pages as CrawledPage model objects.
@@ -609,6 +746,10 @@ class Database:
             cursor.execute("SELECT COUNT(*) as count FROM visas WHERE is_latest = 1")
             stats['visas_total'] = cursor.fetchone()['count']
 
+            # General content
+            cursor.execute("SELECT COUNT(*) as count FROM general_content WHERE is_latest = 1")
+            stats['general_content'] = cursor.fetchone()['count']
+
             # Countries - count from crawled_pages if no visas, otherwise from visas
             if stats['visas_total'] > 0:
                 cursor.execute("SELECT COUNT(DISTINCT country) as count FROM visas WHERE is_latest = 1")
@@ -682,6 +823,31 @@ class Database:
             conn.commit()
             return count
 
+    def delete_general_content(self, country: Optional[str] = None) -> int:
+        """
+        Delete general content from database.
+
+        Args:
+            country: If provided, only delete content from this country. Otherwise delete all.
+
+        Returns:
+            Number of content items deleted
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            if country:
+                cursor.execute("SELECT COUNT(*) as count FROM general_content WHERE country = ?", (country,))
+                count = cursor.fetchone()['count']
+                cursor.execute("DELETE FROM general_content WHERE country = ?", (country,))
+            else:
+                cursor.execute("SELECT COUNT(*) as count FROM general_content")
+                count = cursor.fetchone()['count']
+                cursor.execute("DELETE FROM general_content")
+
+            conn.commit()
+            return count
+
     def delete_embeddings(self) -> int:
         """
         Delete all embeddings from database.
@@ -729,7 +895,7 @@ class Database:
 
     def delete_all_data(self) -> Dict[str, int]:
         """
-        Delete ALL data from database (pages, visas, embeddings, clients, checks).
+        Delete ALL data from database (pages, visas, general content, embeddings, clients, checks).
         DOES NOT delete settings.
 
         Returns:
@@ -738,6 +904,7 @@ class Database:
         result = {
             'pages': self.delete_crawled_pages(),
             'visas': self.delete_visas(),
+            'general_content': self.delete_general_content(),
             'embeddings': self.delete_embeddings(),
             'clients': self.delete_clients(),
             'checks': self.delete_eligibility_checks()
