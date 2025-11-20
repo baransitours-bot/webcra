@@ -138,18 +138,26 @@ class ServiceConfigLoader:
 
         service_config = self.config_mgr.get_dict_config('matcher_config', service='matcher', default={})
 
+        # Return full config structure expected by matcher/scorer
         config = {
-            'matching': {
-                'strict_mode': service_config.get('matching', {}).get('strict_mode', False),
-                'partial_match_score': service_config.get('matching', {}).get('partial_match_score', 0.5),
-                'minimum_score': service_config.get('matching', {}).get('minimum_score', 0.3)
-            },
-            'scoring_weights': service_config.get('scoring_weights', {
-                'age': 0.15,
-                'education': 0.25,
-                'experience': 0.25,
-                'language': 0.20,
-                'funds': 0.15
+            'scoring': service_config.get('scoring', {
+                'age_match': 20,
+                'education_match': 30,
+                'experience_match': 25,
+                'language_match': 15,
+                'other': 10
+            }),
+            'education_levels': service_config.get('education_levels', {
+                'phd': 5,
+                'masters': 4,
+                'bachelors': 3,
+                'diploma': 2,
+                'secondary': 1
+            }),
+            'thresholds': service_config.get('thresholds', {
+                'high_match': 80,
+                'medium_match': 60,
+                'low_match': 40
             })
         }
 
