@@ -134,11 +134,13 @@ class ClassifierController:
         """
         try:
             # Get pages (skip already classified if requested)
+            self.logger.info(f"Getting pages with country={country}, only_unclassified={skip_classified}")
             pages = self.service.repo.get_pages(country, only_unclassified=skip_classified)
+            self.logger.info(f"Found {len(pages)} pages")
 
             if not pages:
                 if on_error:
-                    on_error("No pages found to classify")
+                    on_error(f"No pages found to classify (country={country}, skip_classified={skip_classified})")
                 return {
                     'pages_processed': 0,
                     'visas_extracted': 0,
