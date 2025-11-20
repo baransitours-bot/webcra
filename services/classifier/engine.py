@@ -344,6 +344,22 @@ Return ONLY valid JSON, no other text."""
 
     def _create_general_content_model(self, data: Dict, page: CrawledPage) -> GeneralContent:
         """Convert extracted data to GeneralContent model"""
+        # Get application links from LLM extraction
+        app_links = data.get('application_links', [])
+
+        # If LLM didn't provide URLs, try to match with page metadata links
+        if app_links and page.links:
+            # Try to match labels with actual URLs from crawled links
+            page_links = page.links if isinstance(page.links, list) else []
+            for link_obj in app_links:
+                if not link_obj.get('url') and link_obj.get('label'):
+                    # Try to find matching link in page metadata
+                    label_lower = link_obj['label'].lower()
+                    for url in page_links:
+                        if any(keyword in url.lower() for keyword in label_lower.split()[:3]):
+                            link_obj['url'] = url
+                            break
+
         return GeneralContent(
             country=page.country,
             title=data.get('title', page.title or 'Immigration Information'),
@@ -351,7 +367,7 @@ Return ONLY valid JSON, no other text."""
             summary=data.get('summary', ''),
             key_points=data.get('key_points', []),
             content=data.get('content', ''),
-            application_links=data.get('application_links', []),
+            application_links=app_links,
             source_url=page.url,
             metadata=data.get('metadata', {})
         )

@@ -376,7 +376,7 @@ def build_dual_extraction_prompt(text: str, country: str, visa_schema: Dict) -> 
     if fields.get('documents_required', {}).get('enabled'):
         visa_fields.append('- documents_required: Required documents list')
 
-    prompt = f"""Extract immigration information from this webpage content.
+    prompt = f"""Extract information from this Canadian government webpage.
 
 Country: {country}
 
@@ -385,9 +385,9 @@ Content:
 
 This page may contain:
 1. SPECIFIC VISA/PROGRAM information (visa types, requirements, fees)
-2. GENERAL IMMIGRATION information (guides, FAQs, processes, timelines)
+2. GENERAL VALUABLE INFORMATION (guides, FAQs, processes, benefits, services, employment, healthcare, social programs, travel, settlement)
 3. BOTH types of information
-4. NEITHER (irrelevant page)
+4. NEITHER (truly irrelevant page)
 
 Extract and return as a JSON ARRAY with objects for each type found:
 
@@ -413,9 +413,9 @@ Extract and return as a JSON ARRAY with objects for each type found:
             "content": "Full content",
             "application_links": [{{"label": "...", "url": "..."}}],
             "metadata": {{
-                "audience": "skilled_workers|students|families|general",
+                "audience": "skilled_workers|students|families|general|newcomers|residents",
                 "difficulty": "beginner|intermediate|advanced",
-                "topics": ["immigration", "work_permit", ...]
+                "topics": ["immigration", "work_permit", "employment", "healthcare", "benefits", "education", "settlement", "travel", ...]
             }}
         }}
     }}
@@ -427,22 +427,22 @@ Visa Fields to Extract:
 General Content Types:
 - guide: How-to guides, step-by-step instructions
 - faq: Frequently asked questions
-- process: Application procedures
+- process: Application procedures, how things work
 - requirements: General eligibility/document requirements
 - timeline: Time expectations and deadlines
-- overview: General information and introductions
+- overview: General information, introductions, program overviews
 
 Rules:
 1. Return ARRAY with 0, 1, or 2 objects depending on what's found
 2. If page has SPECIFIC VISA info → include visa object
-3. If page has GENERAL IMMIGRATION info → include general object
+3. If page has ANY VALUABLE INFORMATION (immigration, employment, benefits, healthcare, services, settlement, travel) → include general object
 4. If page has BOTH → include both objects in array
-5. If page has NEITHER → return empty array []
-6. For visa: extract specific program details (fees, requirements, etc.)
-7. For general: extract guidance, processes, FAQs (not specific visas)
-8. Include ALL application links in general content
-9. Be comprehensive - extract all valuable information
-10. If uncertain, include both types (we'll filter later)
+5. If page has NEITHER (only navigation, footers, truly empty) → return empty array []
+6. For visa: extract specific immigration program details (fees, requirements, etc.)
+7. For general: extract ANY valuable government information - employment, benefits, healthcare, social programs, immigration processes, settlement info, travel info, etc.
+8. Include ALL application links in general content (even if URL is not in text, include label)
+9. Be VERY inclusive - if page has useful information for someone moving to/living in Canada, extract it
+10. Default to EXTRACTING rather than skipping - when uncertain, include it
 
 Return ONLY valid JSON array, no other text."""
 
