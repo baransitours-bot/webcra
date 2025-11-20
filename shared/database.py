@@ -629,3 +629,117 @@ class Database:
             stats['embeddings'] = cursor.fetchone()['count']
 
             return stats
+
+    # ============ DATA MANAGEMENT / DELETION ============
+
+    def delete_crawled_pages(self, country: Optional[str] = None) -> int:
+        """
+        Delete crawled pages from database.
+
+        Args:
+            country: If provided, only delete pages from this country. Otherwise delete all.
+
+        Returns:
+            Number of pages deleted
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            if country:
+                cursor.execute("SELECT COUNT(*) as count FROM crawled_pages WHERE country = ?", (country,))
+                count = cursor.fetchone()['count']
+                cursor.execute("DELETE FROM crawled_pages WHERE country = ?", (country,))
+            else:
+                cursor.execute("SELECT COUNT(*) as count FROM crawled_pages")
+                count = cursor.fetchone()['count']
+                cursor.execute("DELETE FROM crawled_pages")
+
+            conn.commit()
+            return count
+
+    def delete_visas(self, country: Optional[str] = None) -> int:
+        """
+        Delete classified visas from database.
+
+        Args:
+            country: If provided, only delete visas from this country. Otherwise delete all.
+
+        Returns:
+            Number of visas deleted
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            if country:
+                cursor.execute("SELECT COUNT(*) as count FROM visas WHERE country = ?", (country,))
+                count = cursor.fetchone()['count']
+                cursor.execute("DELETE FROM visas WHERE country = ?", (country,))
+            else:
+                cursor.execute("SELECT COUNT(*) as count FROM visas")
+                count = cursor.fetchone()['count']
+                cursor.execute("DELETE FROM visas")
+
+            conn.commit()
+            return count
+
+    def delete_embeddings(self) -> int:
+        """
+        Delete all embeddings from database.
+
+        Returns:
+            Number of embeddings deleted
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) as count FROM embeddings")
+            count = cursor.fetchone()['count']
+            cursor.execute("DELETE FROM embeddings")
+            conn.commit()
+            return count
+
+    def delete_clients(self) -> int:
+        """
+        Delete all client profiles from database.
+
+        Returns:
+            Number of clients deleted
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) as count FROM clients")
+            count = cursor.fetchone()['count']
+            cursor.execute("DELETE FROM clients")
+            conn.commit()
+            return count
+
+    def delete_eligibility_checks(self) -> int:
+        """
+        Delete all eligibility check records from database.
+
+        Returns:
+            Number of records deleted
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) as count FROM eligibility_checks")
+            count = cursor.fetchone()['count']
+            cursor.execute("DELETE FROM eligibility_checks")
+            conn.commit()
+            return count
+
+    def delete_all_data(self) -> Dict[str, int]:
+        """
+        Delete ALL data from database (pages, visas, embeddings, clients, checks).
+        DOES NOT delete settings.
+
+        Returns:
+            Dictionary with counts of deleted items
+        """
+        result = {
+            'pages': self.delete_crawled_pages(),
+            'visas': self.delete_visas(),
+            'embeddings': self.delete_embeddings(),
+            'clients': self.delete_clients(),
+            'checks': self.delete_eligibility_checks()
+        }
+        return result

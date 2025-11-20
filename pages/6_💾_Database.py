@@ -30,7 +30,8 @@ tabs = st.tabs([
     "👤 Clients",
     "✅ Eligibility Checks",
     "⚙️ Settings",
-    "🔍 Embeddings"
+    "🔍 Embeddings",
+    "🗑️ Data Management"
 ])
 
 # ============ TAB 1: Overview ============
@@ -100,231 +101,110 @@ with tabs[1]:
     else:
         # Filter by country
         countries = sorted(list(set(p['country'] for p in pages)))
-        selected_country = st.selectbox(
-            "Filter by Country",
-            options=['All'] + countries,
-            key='pages_country'
-        )
+        selected_country = st.selectbox("Filter by Country", ["All"] + countries)
 
-        if selected_country != 'All':
+        if selected_country != "All":
             pages = [p for p in pages if p['country'] == selected_country]
 
-        st.info(f"Showing {len(pages)} pages")
-
-        # Pagination
-        items_per_page = st.slider("Items per page", 5, 50, 10, key='pages_per_page')
-        total_pages = (len(pages) - 1) // items_per_page + 1
-
-        if total_pages > 1:
-            page_num = st.number_input(
-                "Page",
-                min_value=1,
-                max_value=total_pages,
-                value=1,
-                key='pages_page_num'
-            )
-        else:
-            page_num = 1
-
-        start_idx = (page_num - 1) * items_per_page
-        end_idx = start_idx + items_per_page
-        pages_to_show = pages[start_idx:end_idx]
+        st.write(f"**Showing {len(pages)} pages**")
 
         # Display as table
-        for i, page in enumerate(pages_to_show, start=start_idx + 1):
-            with st.expander(f"{i}. {page['country']} - {page['title'][:80]}"):
-                col1, col2 = st.columns([1, 3])
+        if pages:
+            df_data = []
+            for p in pages:
+                df_data.append({
+                    'Country': p['country'],
+                    'Title': p['title'][:50] + '...' if len(p['title']) > 50 else p['title'],
+                    'URL': p['url'][:60] + '...' if len(p['url']) > 60 else p['url'],
+                    'Content Size': f"{len(p.get('content_text', ''))} chars",
+                    'Crawled': p.get('crawled_at', 'N/A')[:10]
+                })
 
-                with col1:
-                    st.markdown(f"**ID:** {page['id']}")
-                    st.markdown(f"**Country:** {page['country']}")
-                    st.markdown(f"**Version:** {page['version']}")
-                    st.markdown(f"**Latest:** {'✅' if page['is_latest'] else '❌'}")
-                    st.markdown(f"**Crawled:** {page['crawled_at']}")
+            df = pd.DataFrame(df_data)
+            st.dataframe(df, use_container_width=True)
 
-                with col2:
-                    st.markdown(f"**Title:** {page['title']}")
-                    st.markdown(f"**URL:** {page['url']}")
-
-                    # Show content preview
-                    content = page['content'][:500]
-                    st.text_area("Content Preview", content, height=100, key=f"page_content_{page['id']}")
-
-                    # Metadata
-                    if page['metadata']:
-                        metadata = json.loads(page['metadata'])
-                        st.json(metadata)
+            # Export
+            st.markdown("---")
+            st.download_button(
+                "📥 Download as CSV",
+                data=df.to_csv(index=False),
+                file_name="crawled_pages.csv",
+                mime="text/csv"
+            )
 
 # ============ TAB 3: Visas ============
 with tabs[2]:
-    st.markdown("### Visas")
+    st.markdown("### Classified Visas")
 
     visas = db.get_latest_visas()
 
     if not visas:
-        st.warning("⚠️ No visas extracted yet. Run the Classifier service first.")
+        st.warning("⚠️ No visas classified yet. Run the Classifier service first.")
     else:
-        # Filters
-        col1, col2, col3 = st.columns(3)
+        # Filter by country
+        countries = sorted(list(set(v['country'] for v in visas)))
+        selected_country = st.selectbox("Filter by Country", ["All"] + countries, key="visa_country")
 
-        with col1:
-            countries = sorted(list(set(v['country'] for v in visas)))
-            selected_country = st.selectbox(
-                "Filter by Country",
-                options=['All'] + countries,
-                key='visas_country'
-            )
+        if selected_country != "All":
+            visas = [v for v in visas if v['country'] == selected_country]
 
-        with col2:
-            categories = sorted(list(set(v['category'] for v in visas if v['category'])))
-            selected_category = st.selectbox(
-                "Filter by Category",
-                options=['All'] + categories,
-                key='visas_category'
-            )
+        st.write(f"**Showing {len(visas)} visas**")
 
-        with col3:
-            search = st.text_input("Search visa type", key='visas_search')
+        # Display as table
+        if visas:
+            for visa in visas[:20]:  # Show first 20
+                with st.expander(f"🎫 {visa['visa_type']} ({visa['country']})"):
+                    st.json(visa)
 
-        # Apply filters
-        filtered_visas = visas
-        if selected_country != 'All':
-            filtered_visas = [v for v in filtered_visas if v['country'] == selected_country]
-        if selected_category != 'All':
-            filtered_visas = [v for v in filtered_visas if v['category'] == selected_category]
-        if search:
-            filtered_visas = [v for v in filtered_visas if search.lower() in v['visa_type'].lower()]
-
-        st.info(f"Showing {len(filtered_visas)} of {len(visas)} visas")
-
-        # Pagination
-        items_per_page = st.slider("Items per page", 5, 50, 10, key='visas_per_page')
-        total_pages = (len(filtered_visas) - 1) // items_per_page + 1
-
-        if total_pages > 1:
-            page_num = st.number_input(
-                "Page",
-                min_value=1,
-                max_value=total_pages,
-                value=1,
-                key='visas_page_num'
-            )
-        else:
-            page_num = 1
-
-        start_idx = (page_num - 1) * items_per_page
-        end_idx = start_idx + items_per_page
-        visas_to_show = filtered_visas[start_idx:end_idx]
-
-        # Display
-        for i, visa in enumerate(visas_to_show, start=start_idx + 1):
-            with st.expander(f"{i}. {visa['visa_type']} ({visa['country']})"):
-                col1, col2 = st.columns([1, 2])
-
-                with col1:
-                    st.markdown(f"**ID:** {visa['id']}")
-                    st.markdown(f"**Country:** {visa['country']}")
-                    st.markdown(f"**Category:** {visa['category']}")
-                    st.markdown(f"**Version:** {visa['version']}")
-                    st.markdown(f"**Latest:** {'✅' if visa['is_latest'] else '❌'}")
-                    st.markdown(f"**Created:** {visa['created_at']}")
-
-                with col2:
-                    st.markdown(f"**Visa Type:** {visa['visa_type']}")
-
-                    if visa['requirements']:
-                        st.markdown("**Requirements:**")
-                        try:
-                            reqs = json.loads(visa['requirements']) if isinstance(visa['requirements'], str) else visa['requirements']
-                            st.json(reqs)
-                        except:
-                            st.text(visa['requirements'])
-
-                    if visa['fees']:
-                        st.markdown("**Fees:**")
-                        try:
-                            fees = json.loads(visa['fees']) if isinstance(visa['fees'], str) else visa['fees']
-                            st.json(fees)
-                        except:
-                            st.text(visa['fees'])
-
-                    if visa['processing_time']:
-                        st.markdown(f"**Processing Time:** {visa['processing_time']}")
+            if len(visas) > 20:
+                st.info(f"ℹ️ Showing first 20 of {len(visas)} visas")
 
 # ============ TAB 4: Clients ============
 with tabs[3]:
-    st.markdown("### Clients")
+    st.markdown("### Client Profiles")
 
     with db.get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM clients ORDER BY created_at DESC")
-        clients = cursor.fetchall()
+        cursor.execute("SELECT * FROM clients")
+        clients = [dict(row) for row in cursor.fetchall()]
 
     if not clients:
-        st.info("ℹ️ No clients in database yet.")
+        st.info("No client profiles yet")
     else:
-        st.info(f"Total clients: {len(clients)}")
-
         for client in clients:
-            with st.expander(f"{client['name']} ({client['email']})"):
-                st.markdown(f"**ID:** {client['id']}")
-                st.markdown(f"**Nationality:** {client['nationality']}")
-                st.markdown(f"**Created:** {client['created_at']}")
-
-                if client['profile']:
-                    st.markdown("**Profile:**")
-                    try:
-                        profile = json.loads(client['profile'])
-                        st.json(profile)
-                    except:
-                        st.text(client['profile'])
+            with st.expander(f"👤 {client['name']} ({client['email']})"):
+                st.write(f"**Nationality:** {client['nationality']}")
+                st.json(json.loads(client['profile']) if isinstance(client['profile'], str) else client['profile'])
 
 # ============ TAB 5: Eligibility Checks ============
 with tabs[4]:
-    st.markdown("### Eligibility Checks")
+    st.markdown("### Eligibility Checks History")
 
     with db.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT ec.*, c.name as client_name, v.visa_type
+            SELECT ec.*, c.name as client_name
             FROM eligibility_checks ec
             LEFT JOIN clients c ON ec.client_id = c.id
-            LEFT JOIN visas v ON ec.visa_id = v.id
-            ORDER BY ec.check_date DESC
+            ORDER BY ec.created_at DESC
+            LIMIT 50
         """)
-        checks = cursor.fetchall()
+        checks = [dict(row) for row in cursor.fetchall()]
 
     if not checks:
-        st.info("ℹ️ No eligibility checks performed yet.")
+        st.info("No eligibility checks yet")
     else:
-        st.info(f"Total checks: {len(checks)}")
+        st.write(f"**Showing {len(checks)} most recent checks**")
 
         for check in checks:
-            eligible_text = "✅ Eligible" if check['eligible'] else "❌ Not Eligible"
-            with st.expander(f"{check['client_name']} → {check['visa_type']} - {eligible_text}"):
+            with st.expander(f"✅ {check['client_name']} - {check['visa_type']} ({check['created_at'][:10]})"):
                 col1, col2 = st.columns(2)
-
                 with col1:
-                    st.markdown(f"**Date:** {check['check_date']}")
-                    st.markdown(f"**Score:** {check['score']}")
-                    st.markdown(f"**Eligible:** {eligible_text}")
-
+                    st.write(f"**Score:** {check['score']}")
+                    st.write(f"**Result:** {check['result']}")
                 with col2:
-                    if check['gaps']:
-                        st.markdown("**Gaps:**")
-                        try:
-                            gaps = json.loads(check['gaps'])
-                            st.json(gaps)
-                        except:
-                            st.text(check['gaps'])
-
-                    if check['strengths']:
-                        st.markdown("**Strengths:**")
-                        try:
-                            strengths = json.loads(check['strengths'])
-                            st.json(strengths)
-                        except:
-                            st.text(check['strengths'])
+                    st.write(f"**Country:** {check['country']}")
+                st.json(json.loads(check['details']) if isinstance(check['details'], str) else check['details'])
 
 # ============ TAB 6: Settings ============
 with tabs[5]:
@@ -332,52 +212,22 @@ with tabs[5]:
 
     with db.get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT * FROM settings
-            ORDER BY category, key
-        """)
-        settings = cursor.fetchall()
+        cursor.execute("SELECT * FROM settings ORDER BY key")
+        settings = [dict(row) for row in cursor.fetchall()]
 
-    if not settings:
-        st.warning("⚠️ No settings in database. Run app initialization.")
-    else:
-        # Group by category
-        categories = {}
+    if settings:
+        # Group by service
+        by_service = {}
         for setting in settings:
-            cat = setting['category'] or 'other'
-            if cat not in categories:
-                categories[cat] = []
-            categories[cat].append(setting)
+            service = setting.get('service', 'system')
+            if service not in by_service:
+                by_service[service] = []
+            by_service[service].append(setting)
 
-        for category, cat_settings in sorted(categories.items()):
-            st.markdown(f"#### {category.upper()}")
-
-            # Create DataFrame
-            data = []
-            for s in cat_settings:
-                # Check if overridden by .env
-                import os
-                env_key = s['key'].upper().replace('.', '_')
-                env_value = os.getenv(env_key)
-
-                if env_value:
-                    source = "🌍 .env"
-                    actual_value = env_value
-                else:
-                    source = "💾 Database"
-                    actual_value = s['value']
-
-                data.append({
-                    "Key": s['key'],
-                    "Value": actual_value,
-                    "Type": s['type'],
-                    "Source": source,
-                    "Updated": s['updated_at']
-                })
-
-            df = pd.DataFrame(data)
-            st.dataframe(df, hide_index=True, width=1200)
-            st.markdown("")
+        for service, service_settings in by_service.items():
+            with st.expander(f"⚙️ {service.upper()}"):
+                for s in service_settings:
+                    st.write(f"**{s['key']}:** `{s['value'][:100]}`")
 
 # ============ TAB 7: Embeddings ============
 with tabs[6]:
@@ -386,78 +236,258 @@ with tabs[6]:
     with db.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT e.*, v.visa_type, v.country
+            SELECT e.visa_id, e.model_name, v.visa_type, v.country
             FROM embeddings e
             JOIN visas v ON e.visa_id = v.id
-            ORDER BY e.indexed_at DESC
+            WHERE v.is_latest = 1
         """)
-        embeddings = cursor.fetchall()
+        embeddings = [dict(row) for row in cursor.fetchall()]
 
     if not embeddings:
-        st.warning("⚠️ No embeddings indexed yet. Run: `python scripts/index_embeddings.py`")
+        st.info("No embeddings yet. Run embedding generation script.")
     else:
-        st.info(f"Total embeddings: {len(embeddings)}")
+        st.write(f"**Total embeddings:** {len(embeddings)}")
 
-        # Show sample
-        st.markdown("#### Recent Embeddings")
+        # Group by model
+        models = {}
+        for emb in embeddings:
+            model = emb['model_name']
+            if model not in models:
+                models[model] = []
+            models[model].append(emb)
 
-        for emb in embeddings[:20]:
-            with st.expander(f"{emb['visa_type']} ({emb['country']})"):
-                st.markdown(f"**Visa ID:** {emb['visa_id']}")
-                st.markdown(f"**Model:** {emb['model_name']}")
-                st.markdown(f"**Indexed:** {emb['indexed_at']}")
+        for model, model_embs in models.items():
+            st.write(f"**Model:** {model} - {len(model_embs)} embeddings")
 
-                # Show embedding dimension
-                import struct
-                embedding_bytes = emb['embedding']
-                embedding_size = len(embedding_bytes) // 4  # float32
-                st.markdown(f"**Dimensions:** {embedding_size}")
+# ============ TAB 8: Data Management ============
+with tabs[7]:
+    st.markdown("### 🗑️ Data Management & Reset")
 
-st.markdown("---")
+    st.warning("""
+    ⚠️ **Warning: Data deletion is permanent and cannot be undone!**
 
-# Export functionality
-st.markdown("### 📥 Export Data")
+    Use this page to delete data from the database. This is useful for:
+    - Starting fresh with new data
+    - Removing data from specific countries
+    - Clearing test data
+    - Freeing up database space
+    """)
 
-col1, col2, col3 = st.columns(3)
+    st.markdown("---")
 
-with col1:
-    if st.button("Export Pages as JSON"):
-        pages = db.get_latest_pages()
-        if pages:
-            st.download_button(
-                "⬇️ Download pages.json",
-                data=json.dumps(pages, indent=2),
-                file_name="pages.json",
-                mime="application/json"
+    # Get current stats
+    stats = db.get_stats()
+
+    # Section 1: Delete by Country
+    st.markdown("### 🌍 Delete by Country")
+
+    # Get list of countries
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT country FROM crawled_pages")
+        page_countries = [row['country'] for row in cursor.fetchall()]
+        cursor.execute("SELECT DISTINCT country FROM visas")
+        visa_countries = [row['country'] for row in cursor.fetchall()]
+
+    all_countries = sorted(list(set(page_countries + visa_countries)))
+
+    if all_countries:
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### Delete Crawled Pages by Country")
+            country_pages = st.selectbox(
+                "Select Country",
+                all_countries,
+                key="delete_pages_country"
             )
 
-with col2:
-    if st.button("Export Visas as JSON"):
-        visas = db.get_latest_visas()
-        if visas:
-            # Convert to serializable format
-            visas_export = []
-            for v in visas:
-                visa_dict = dict(v)
-                visas_export.append(visa_dict)
+            # Show count
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) as count FROM crawled_pages WHERE country = ?", (country_pages,))
+                pages_count = cursor.fetchone()['count']
 
-            st.download_button(
-                "⬇️ Download visas.json",
-                data=json.dumps(visas_export, indent=2, default=str),
-                file_name="visas.json",
-                mime="application/json"
+            st.caption(f"📄 {pages_count} pages from {country_pages}")
+
+            if st.button(f"🗑️ Delete {pages_count} Pages from {country_pages.title()}", type="secondary", key="delete_pages_btn"):
+                deleted = db.delete_crawled_pages(country=country_pages)
+                st.success(f"✅ Deleted {deleted} crawled pages from {country_pages}")
+                st.rerun()
+
+        with col2:
+            st.markdown("#### Delete Visas by Country")
+            country_visas = st.selectbox(
+                "Select Country",
+                all_countries,
+                key="delete_visas_country"
             )
 
-with col3:
-    if st.button("Export Settings as JSON"):
-        with db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM settings")
-            settings = [dict(row) for row in cursor.fetchall()]
+            # Show count
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) as count FROM visas WHERE country = ?", (country_visas,))
+                visas_count = cursor.fetchone()['count']
 
-        st.download_button(
-            "⬇️ Download settings.json",
-            data=json.dumps(settings, indent=2),
-            file_name="settings.json",
-            mime="application/json"
-        )
+            st.caption(f"🎫 {visas_count} visas from {country_visas}")
+
+            if st.button(f"🗑️ Delete {visas_count} Visas from {country_visas.title()}", type="secondary", key="delete_visas_btn"):
+                deleted = db.delete_visas(country=country_visas)
+                st.success(f"✅ Deleted {deleted} visas from {country_visas}")
+                st.rerun()
+    else:
+        st.info("No countries found in database")
+
+    st.markdown("---")
+
+    # Section 2: Delete Specific Data Types
+    st.markdown("### 📊 Delete by Data Type")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("#### 🕷️ All Crawled Pages")
+        st.metric("Pages", stats.get('pages_crawled', 0))
+
+        if st.button("🗑️ Delete All Pages", type="secondary", key="delete_all_pages"):
+            if stats.get('pages_crawled', 0) > 0:
+                if st.checkbox("✅ Yes, delete all pages", key="confirm_pages"):
+                    deleted = db.delete_crawled_pages()
+                    st.success(f"✅ Deleted {deleted} crawled pages")
+                    st.rerun()
+            else:
+                st.info("No pages to delete")
+
+    with col2:
+        st.markdown("#### 📋 All Visas")
+        st.metric("Visas", stats.get('visas_total', 0))
+
+        if st.button("🗑️ Delete All Visas", type="secondary", key="delete_all_visas"):
+            if stats.get('visas_total', 0) > 0:
+                if st.checkbox("✅ Yes, delete all visas", key="confirm_visas"):
+                    deleted = db.delete_visas()
+                    st.success(f"✅ Deleted {deleted} visas")
+                    st.rerun()
+            else:
+                st.info("No visas to delete")
+
+    with col3:
+        st.markdown("#### 🔍 All Embeddings")
+        st.metric("Embeddings", stats.get('embeddings', 0))
+
+        if st.button("🗑️ Delete All Embeddings", type="secondary", key="delete_all_embeddings"):
+            if stats.get('embeddings', 0) > 0:
+                if st.checkbox("✅ Yes, delete all embeddings", key="confirm_embeddings"):
+                    deleted = db.delete_embeddings()
+                    st.success(f"✅ Deleted {deleted} embeddings")
+                    st.rerun()
+            else:
+                st.info("No embeddings to delete")
+
+    st.markdown("---")
+
+    # Section 3: Nuclear Option - Delete Everything
+    st.markdown("### 💥 Delete ALL Data")
+
+    st.error("""
+    **☢️ DANGER ZONE: This will delete ALL data from the database!**
+
+    This will permanently remove:
+    - All crawled pages
+    - All classified visas
+    - All embeddings
+    - All client profiles
+    - All eligibility check records
+
+    **Settings will NOT be deleted** - your configuration is safe.
+    """)
+
+    total_records = (
+        stats.get('pages_crawled', 0) +
+        stats.get('visas_total', 0) +
+        stats.get('embeddings', 0) +
+        stats.get('clients', 0) +
+        stats.get('checks_performed', 0)
+    )
+
+    st.metric("Total Records to Delete", total_records)
+
+    if total_records > 0:
+        col1, col2, col3 = st.columns([1, 1, 1])
+
+        with col2:
+            delete_all_checkbox = st.checkbox(
+                "☑️ I understand this cannot be undone",
+                key="confirm_delete_all"
+            )
+
+            if delete_all_checkbox:
+                if st.button("💥 DELETE ALL DATA", type="primary", key="delete_all_data_btn"):
+                    result = db.delete_all_data()
+                    st.success(f"""
+                    ✅ **All data deleted successfully!**
+
+                    Deleted:
+                    - {result['pages']} crawled pages
+                    - {result['visas']} visas
+                    - {result['embeddings']} embeddings
+                    - {result['clients']} clients
+                    - {result['checks']} eligibility checks
+
+                    **Total:** {sum(result.values())} records deleted
+                    """)
+                    st.balloons()
+                    st.rerun()
+    else:
+        st.info("✅ Database is already empty")
+
+    st.markdown("---")
+
+    # Quick Export before delete
+    st.markdown("### 📥 Export Before Delete (Recommended)")
+
+    st.info("💡 **Tip:** Always export your data before deleting in case you need it later!")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        if st.button("Export Pages as JSON"):
+            pages = db.get_latest_pages()
+            if pages:
+                st.download_button(
+                    "⬇️ Download pages.json",
+                    data=json.dumps(pages, indent=2, default=str),
+                    file_name="pages.json",
+                    mime="application/json"
+                )
+
+    with col2:
+        if st.button("Export Visas as JSON"):
+            visas = db.get_latest_visas()
+            if visas:
+                # Convert to serializable format
+                visas_export = []
+                for v in visas:
+                    visa_dict = dict(v)
+                    visas_export.append(visa_dict)
+
+                st.download_button(
+                    "⬇️ Download visas.json",
+                    data=json.dumps(visas_export, indent=2, default=str),
+                    file_name="visas.json",
+                    mime="application/json"
+                )
+
+    with col3:
+        if st.button("Export Settings as JSON"):
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM settings")
+                settings = [dict(row) for row in cursor.fetchall()]
+
+            st.download_button(
+                "⬇️ Download settings.json",
+                data=json.dumps(settings, indent=2),
+                file_name="settings.json",
+                mime="application/json"
+            )
