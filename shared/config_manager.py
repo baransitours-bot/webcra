@@ -517,6 +517,64 @@ class ConfigManager:
             print(f"Error saving dict config: {e}")
             return False
 
+    # === Extraction Schema Management ===
+
+    def get_extraction_schema(self) -> Dict:
+        """
+        Get extraction schema configuration for Classifier
+
+        Returns:
+            Extraction schema configuration
+        """
+        schema = self.get_dict_config('extraction_schema', service='classifier', default=None)
+
+        if not schema:
+            # Return default schema
+            from shared.extraction_schema import SCHEMA_PRESETS, get_default_schema
+            default_preset = get_default_schema()
+            return SCHEMA_PRESETS[default_preset]
+
+        return schema
+
+    def set_extraction_schema(self, schema: Dict) -> bool:
+        """
+        Save extraction schema configuration
+
+        Args:
+            schema: Schema configuration dict
+
+        Returns:
+            True if successful
+        """
+        # Validate schema before saving
+        from shared.extraction_schema import validate_schema
+        is_valid, errors = validate_schema(schema)
+
+        if not is_valid:
+            print(f"Invalid schema: {errors}")
+            return False
+
+        return self.set_dict_config('extraction_schema', schema)
+
+    def load_schema_preset(self, preset_name: str) -> bool:
+        """
+        Load a schema preset by name
+
+        Args:
+            preset_name: Preset name (basic, standard, comprehensive)
+
+        Returns:
+            True if successful
+        """
+        from shared.extraction_schema import SCHEMA_PRESETS
+
+        if preset_name not in SCHEMA_PRESETS:
+            print(f"Unknown preset: {preset_name}")
+            return False
+
+        schema = SCHEMA_PRESETS[preset_name]
+        return self.set_extraction_schema(schema)
+
     def reset_to_defaults(self) -> bool:
         """
         Clear all database settings to reset to YAML defaults

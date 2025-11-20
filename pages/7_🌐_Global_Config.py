@@ -33,7 +33,7 @@ st.markdown("""
 config_mgr = get_config()
 
 # Tabs
-tabs = st.tabs(["🌍 Countries", "🔑 Keywords", "🏷️ Visa Categories", "⚙️ System", "🔄 Reset"])
+tabs = st.tabs(["🌍 Countries", "🔑 Keywords", "🏷️ Visa Categories", "📊 Extraction Schema", "⚙️ System", "🔄 Reset"])
 
 # ============ TAB 1: Countries ============
 with tabs[0]:
@@ -256,8 +256,226 @@ with tabs[2]:
                 else:
                     st.error("❌ Failed to update keywords")
 
-# ============ TAB 4: System Settings ============
+# ============ TAB 4: Extraction Schema ============
 with tabs[3]:
+    st.markdown("### Extraction Schema Configuration")
+    st.info("Configure which fields the Classifier extracts from visa pages. More fields = more comprehensive data but slower processing and higher LLM costs.")
+
+    # Import schema presets
+    from shared.extraction_schema import SCHEMA_PRESETS, get_default_schema, validate_schema
+
+    # Get current schema
+    current_schema = config_mgr.get_extraction_schema()
+
+    # Determine current preset (if any)
+    current_preset = None
+    for preset_name, preset_config in SCHEMA_PRESETS.items():
+        if preset_config.get('fields') == current_schema.get('fields'):
+            current_preset = preset_name
+            break
+
+    st.markdown("#### Quick Presets")
+
+    # Display preset options
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("**🎯 Basic**")
+        st.caption(SCHEMA_PRESETS['basic']['description'])
+        st.write("**Extracts:**")
+        st.write("• Visa type & category")
+        st.write("• Basic requirements")
+        st.write("• Application fee")
+        st.write("• Processing time")
+
+        if st.button("📥 Load Basic", type="secondary" if current_preset != 'basic' else "primary", key="load_basic"):
+            success = config_mgr.load_schema_preset('basic')
+            if success:
+                st.success("✅ Loaded Basic schema")
+                st.rerun()
+            else:
+                st.error("❌ Failed to load preset")
+
+    with col2:
+        st.markdown("**⚖️ Standard** (Recommended)")
+        st.caption(SCHEMA_PRESETS['standard']['description'])
+        st.write("**Extracts:**")
+        st.write("• All Basic fields")
+        st.write("• Detailed requirements")
+        st.write("• Full fee breakdown")
+        st.write("• Documents & eligibility")
+        st.write("• Benefits & rights")
+
+        if st.button("📥 Load Standard", type="secondary" if current_preset != 'standard' else "primary", key="load_standard"):
+            success = config_mgr.load_schema_preset('standard')
+            if success:
+                st.success("✅ Loaded Standard schema")
+                st.rerun()
+            else:
+                st.error("❌ Failed to load preset")
+
+    with col3:
+        st.markdown("**🔬 Comprehensive**")
+        st.caption(SCHEMA_PRESETS['comprehensive']['description'])
+        st.write("**Extracts:**")
+        st.write("• All Standard fields")
+        st.write("• Cost breakdown")
+        st.write("• Timeline stages")
+        st.write("• Renewal information")
+        st.write("• Restrictions & conditions")
+        st.write("• Appeal process")
+
+        if st.button("📥 Load Comprehensive", type="secondary" if current_preset != 'comprehensive' else "primary", key="load_comprehensive"):
+            success = config_mgr.load_schema_preset('comprehensive')
+            if success:
+                st.success("✅ Loaded Comprehensive schema")
+                st.rerun()
+            else:
+                st.error("❌ Failed to load preset")
+
+    st.markdown("---")
+    st.markdown("#### Current Schema")
+
+    # Show current preset or custom
+    if current_preset:
+        st.success(f"**Active Preset:** {SCHEMA_PRESETS[current_preset]['name']} - {SCHEMA_PRESETS[current_preset]['description']}")
+    else:
+        st.info("**Active Schema:** Custom configuration")
+
+    # Count enabled fields
+    enabled_fields = [f for f, cfg in current_schema.get('fields', {}).items() if cfg.get('enabled', False)]
+    st.metric("Enabled Fields", len(enabled_fields))
+
+    # Show enabled fields
+    with st.expander("📋 View Enabled Fields", expanded=False):
+        for field_name in enabled_fields:
+            field_config = current_schema['fields'][field_name]
+
+            # Show field name
+            st.markdown(f"**{field_name.replace('_', ' ').title()}**")
+
+            # Show subfields if any
+            if 'subfields' in field_config:
+                enabled_subfields = [sf for sf, enabled in field_config['subfields'].items() if enabled]
+                st.caption(f"  └─ Subfields: {', '.join(enabled_subfields)}")
+
+            st.markdown("")
+
+    st.markdown("---")
+    st.markdown("#### Advanced: Custom Configuration")
+
+    with st.expander("⚙️ Customize Schema (Advanced)", expanded=False):
+        st.warning("⚠️ Custom configurations will override preset selections. Only modify if you need specific field combinations.")
+
+        # Show all available fields with toggles
+        st.markdown("**Enable/Disable Fields:**")
+
+        custom_config = current_schema.copy()
+        fields = custom_config.get('fields', {})
+
+        # Group fields by category
+        st.markdown("**Core Fields** (Required)")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.checkbox("Visa Type", value=True, disabled=True, help="Required field")
+        with col2:
+            st.checkbox("Country", value=True, disabled=True, help="Required field")
+
+        st.markdown("**Basic Information**")
+        for field_name in ['category', 'processing_time', 'documents_required']:
+            if field_name in fields:
+                fields[field_name]['enabled'] = st.checkbox(
+                    field_name.replace('_', ' ').title(),
+                    value=fields[field_name].get('enabled', False),
+                    key=f"toggle_{field_name}"
+                )
+
+        st.markdown("**Requirements & Eligibility**")
+        for field_name in ['requirements', 'eligibility']:
+            if field_name in fields:
+                fields[field_name]['enabled'] = st.checkbox(
+                    field_name.replace('_', ' ').title(),
+                    value=fields[field_name].get('enabled', False),
+                    key=f"toggle_{field_name}"
+                )
+
+        st.markdown("**Costs & Fees**")
+        for field_name in ['fees', 'cost_breakdown']:
+            if field_name in fields:
+                fields[field_name]['enabled'] = st.checkbox(
+                    field_name.replace('_', ' ').title(),
+                    value=fields[field_name].get('enabled', False),
+                    key=f"toggle_{field_name}"
+                )
+
+        st.markdown("**Timeline & Processing**")
+        for field_name in ['timeline_stages']:
+            if field_name in fields:
+                fields[field_name]['enabled'] = st.checkbox(
+                    field_name.replace('_', ' ').title(),
+                    value=fields[field_name].get('enabled', False),
+                    key=f"toggle_{field_name}"
+                )
+
+        st.markdown("**Benefits & Rights**")
+        for field_name in ['benefits']:
+            if field_name in fields:
+                fields[field_name]['enabled'] = st.checkbox(
+                    field_name.replace('_', ' ').title(),
+                    value=fields[field_name].get('enabled', False),
+                    key=f"toggle_{field_name}"
+                )
+
+        st.markdown("**Restrictions & Conditions**")
+        for field_name in ['restrictions', 'conditions', 'renewal', 'appeal_process']:
+            if field_name in fields:
+                fields[field_name]['enabled'] = st.checkbox(
+                    field_name.replace('_', ' ').title(),
+                    value=fields[field_name].get('enabled', False),
+                    key=f"toggle_{field_name}"
+                )
+
+        # Save custom configuration
+        if st.button("💾 Save Custom Configuration", type="primary"):
+            custom_config['fields'] = fields
+            is_valid, errors = validate_schema(custom_config)
+
+            if not is_valid:
+                st.error(f"❌ Invalid schema: {', '.join(errors)}")
+            else:
+                success = config_mgr.set_extraction_schema(custom_config)
+                if success:
+                    st.success("✅ Custom schema saved")
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to save schema")
+
+    st.markdown("---")
+    st.markdown("#### Schema Preview")
+
+    with st.expander("🔍 View JSON Schema", expanded=False):
+        st.json(current_schema)
+
+    # Performance impact info
+    st.markdown("---")
+    st.markdown("### 📊 Performance Impact")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Basic", "~500 tokens", "Fast & Cheap")
+        st.caption("✅ Best for quick classification")
+
+    with col2:
+        st.metric("Standard", "~1000 tokens", "Balanced")
+        st.caption("✅ Recommended for most use cases")
+
+    with col3:
+        st.metric("Comprehensive", "~2000 tokens", "Detailed")
+        st.caption("⚠️ Higher cost, slower processing")
+
+# ============ TAB 5: System Settings ============
+with tabs[4]:
     st.markdown("### System Settings")
 
     col1, col2 = st.columns(2)
@@ -372,8 +590,8 @@ with tabs[3]:
             mime="application/json"
         )
 
-# ============ TAB 5: Reset ============
-with tabs[4]:
+# ============ TAB 6: Reset ============
+with tabs[5]:
     st.markdown("### Reset Configuration")
 
     st.warning("""

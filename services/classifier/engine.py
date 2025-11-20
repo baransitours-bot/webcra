@@ -132,11 +132,18 @@ class ClassifierEngine:
         return self._create_visa_model(visa_data, page)
 
     def _extract_with_llm(self, text: str, country: str) -> Optional[Dict]:
-        """Use LLM to extract visa information"""
-        # Truncate text if too long
-        text_sample = text[:8000] if len(text) > 8000 else text
+        """Use LLM to extract visa information using configurable schema"""
+        # Get extraction schema from config
+        schema_config = self.config.get('extraction_schema')
 
-        prompt = f"""Extract visa/immigration program information from this webpage content.
+        # Build prompt dynamically based on schema
+        if schema_config:
+            from shared.extraction_schema import build_extraction_prompt
+            prompt = build_extraction_prompt(schema_config, text, country)
+        else:
+            # Fallback to basic extraction if no schema configured
+            text_sample = text[:8000] if len(text) > 8000 else text
+            prompt = f"""Extract visa/immigration program information from this webpage content.
 
 Country: {country}
 
@@ -151,14 +158,12 @@ Extract the following information in JSON format:
         "age": {{"min": null, "max": null}},
         "education": "education level or null",
         "experience_years": null,
-        "language": "language requirement or null",
-        "other": []
+        "language": "language requirement or null"
     }},
     "fees": {{
         "application_fee": "amount or null"
     }},
-    "processing_time": "processing time or null",
-    "documents_required": []
+    "processing_time": "processing time or null"
 }}
 
 Rules:
