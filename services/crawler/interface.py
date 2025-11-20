@@ -14,6 +14,7 @@ from pathlib import Path
 from services.crawler.engine import CrawlerEngine
 from services.crawler.repository import CrawlerRepository
 from shared.logger import setup_logger
+from shared.config_manager import get_config as get_config_mgr
 
 
 class CrawlerService:
@@ -29,13 +30,35 @@ class CrawlerService:
         Initialize crawler service.
 
         Args:
-            config_path: Path to config file
+            config_path: Path to config file (for backward compatibility, used as fallback)
         """
         self.logger = setup_logger('crawler_service')
 
-        # Load configuration (FUEL source)
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
+        # Load configuration from ConfigManager (DB > YAML)
+        config_mgr = get_config_mgr()
+
+        # Build config dict from ConfigManager
+        # First load YAML for structure, then override with ConfigManager values
+        yaml_config = {}
+        if Path(config_path).exists():
+            with open(config_path, 'r') as f:
+                yaml_config = yaml.safe_load(f)
+
+        # Override with ConfigManager values (these come from DB if set, otherwise YAML)
+        self.config = {
+            'crawling': {
+                'max_depth': config_mgr.get('crawler.max_depth', yaml_config.get('crawling', {}).get('max_depth', 3)),
+                'max_pages_per_country': config_mgr.get('crawler.max_pages', yaml_config.get('crawling', {}).get('max_pages_per_country', 100)),
+                'delay_between_requests': config_mgr.get('crawler.delay', yaml_config.get('crawling', {}).get('delay_between_requests', 1)),
+                'concurrent_requests': yaml_config.get('crawling', {}).get('concurrent_requests', 1),
+                'timeout': yaml_config.get('crawling', {}).get('timeout', 30),
+                'robots_txt': yaml_config.get('crawling', {}).get('robots_txt', True),
+                'user_agent': yaml_config.get('crawling', {}).get('user_agent', 'Mozilla/5.0 (compatible; ImmigrationBot/1.0)')
+            },
+            'keywords': config_mgr.get_list_config('keywords', yaml_config.get('keywords', [])),
+            'download_extensions': yaml_config.get('download_extensions', ['.pdf', '.doc', '.docx', '.xlsx']),
+            'exclude_patterns': yaml_config.get('exclude_patterns', ['/news/', '/media/', '/contact/', '/about/'])
+        }
 
         # Initialize layers
         self.repo = CrawlerRepository()  # FUEL TRANSPORT
