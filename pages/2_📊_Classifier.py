@@ -234,8 +234,8 @@ with tab2:
                 import os
                 logs = []
                 all_visas = []
-                total_pages = 0
-                pages_processed = 0
+                # Use dict for mutable state tracking
+                state = {'total_pages': 0, 'pages_processed': 0}
 
                 try:
                     # Set API key in environment if provided
@@ -270,9 +270,8 @@ with tab2:
                         log_area.code('\n'.join(logs))
 
                     def on_page(current, total, page_title):
-                        nonlocal total_pages, pages_processed
-                        total_pages = total
-                        pages_processed = current
+                        state['total_pages'] = total
+                        state['pages_processed'] = current
 
                         logs.append(f"\n[{current}/{total}] Processing: {page_title[:60]}...")
                         log_area.code('\n'.join(logs[-25:]))
@@ -293,13 +292,13 @@ with tab2:
                                 st.json(visa_data)
                                 st.markdown("---")
 
-                        status_text.text(f"Processing... ({pages_processed}/{total_pages} pages, {len(all_visas)} visas found)")
+                        status_text.text(f"Processing... ({state['pages_processed']}/{state['total_pages']} pages, {len(all_visas)} visas found)")
 
                     def on_complete(result):
                         progress_bar.progress(1.0)
 
                         visas_count = result.get('visas_extracted', len(all_visas))
-                        pages_count = result.get('pages_processed', pages_processed)
+                        pages_count = result.get('pages_processed', state['pages_processed'])
 
                         logs.append(f"\n[SUCCESS] ==================== COMPLETED ====================")
                         logs.append(f"[INFO] Pages processed: {pages_count}")
@@ -327,7 +326,7 @@ with tab2:
 
                     # Save results to session
                     st.session_state['classifier_results'] = {
-                        'pages_processed': result.get('pages_processed', pages_processed),
+                        'pages_processed': result.get('pages_processed', state['pages_processed']),
                         'visas_extracted': result.get('visas_extracted', len(all_visas)),
                         'visas': all_visas,
                         'status': 'completed',
