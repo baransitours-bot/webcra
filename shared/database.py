@@ -565,8 +565,11 @@ class Database:
             cursor.execute("SELECT COUNT(*) as count FROM visas WHERE is_latest = 1")
             stats['visas_total'] = cursor.fetchone()['count']
 
-            # Countries
-            cursor.execute("SELECT COUNT(DISTINCT country) as count FROM visas WHERE is_latest = 1")
+            # Countries - count from crawled_pages if no visas, otherwise from visas
+            if stats['visas_total'] > 0:
+                cursor.execute("SELECT COUNT(DISTINCT country) as count FROM visas WHERE is_latest = 1")
+            else:
+                cursor.execute("SELECT COUNT(DISTINCT country) as count FROM crawled_pages WHERE is_latest = 1")
             stats['countries'] = cursor.fetchone()['count']
 
             # Clients
