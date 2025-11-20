@@ -27,6 +27,7 @@ tabs = st.tabs([
     "📊 Overview",
     "🕷️ Crawled Pages",
     "📋 Visas",
+    "📖 General Content",
     "👤 Clients",
     "✅ Eligibility Checks",
     "⚙️ Settings",
@@ -159,8 +160,59 @@ with tabs[2]:
             if len(visas) > 20:
                 st.info(f"ℹ️ Showing first 20 of {len(visas)} visas")
 
-# ============ TAB 4: Clients ============
+# ============ TAB 4: General Content ============
 with tabs[3]:
+    st.markdown("### General Immigration Content")
+
+    general_content = db.get_general_content()
+
+    if not general_content:
+        st.warning("⚠️ No general content classified yet. Run the Classifier service first.")
+    else:
+        # Filter by country and type
+        col1, col2 = st.columns(2)
+        with col1:
+            countries = sorted(list(set(gc.country for gc in general_content)))
+            selected_country = st.selectbox("Filter by Country", ["All"] + countries, key="gc_country")
+        with col2:
+            content_types = sorted(list(set(gc.content_type for gc in general_content if gc.content_type)))
+            selected_type = st.selectbox("Filter by Type", ["All"] + content_types, key="gc_type")
+
+        # Apply filters
+        filtered = general_content
+        if selected_country != "All":
+            filtered = [gc for gc in filtered if gc.country == selected_country]
+        if selected_type != "All":
+            filtered = [gc for gc in filtered if gc.content_type == selected_type]
+
+        st.write(f"**Showing {len(filtered)} content items**")
+
+        # Display items
+        if filtered:
+            for content in filtered[:20]:  # Show first 20
+                with st.expander(f"📖 {content.title[:80]} ({content.country.title()}) - {content.content_type.title()}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Type:** {content.content_type.title()}")
+                        st.write(f"**Audience:** {content.audience.title()}")
+                        st.write(f"**Difficulty:** {content.difficulty.title()}")
+                    with col2:
+                        st.write(f"**Key Points:** {len(content.key_points)}")
+                        st.write(f"**Links:** {len(content.application_links)}")
+                        if content.created_at:
+                            st.write(f"**Created:** {content.created_at[:10]}")
+
+                    st.markdown("**Summary:**")
+                    st.write(content.summary)
+
+                    if st.checkbox(f"Show Details", key=f"gc_detail_{content.id}"):
+                        st.json(content.to_dict())
+
+            if len(filtered) > 20:
+                st.info(f"ℹ️ Showing first 20 of {len(filtered)} content items")
+
+# ============ TAB 5: Clients ============
+with tabs[4]:
     st.markdown("### Client Profiles")
 
     with db.get_connection() as conn:
@@ -176,8 +228,8 @@ with tabs[3]:
                 st.write(f"**Nationality:** {client['nationality']}")
                 st.json(json.loads(client['profile']) if isinstance(client['profile'], str) else client['profile'])
 
-# ============ TAB 5: Eligibility Checks ============
-with tabs[4]:
+# ============ TAB 6: Eligibility Checks ============
+with tabs[5]:
     st.markdown("### Eligibility Checks History")
 
     with db.get_connection() as conn:
@@ -206,8 +258,8 @@ with tabs[4]:
                     st.write(f"**Country:** {check['country']}")
                 st.json(json.loads(check['details']) if isinstance(check['details'], str) else check['details'])
 
-# ============ TAB 6: Settings ============
-with tabs[5]:
+# ============ TAB 7: Settings ============
+with tabs[6]:
     st.markdown("### System Settings")
 
     with db.get_connection() as conn:
@@ -229,8 +281,8 @@ with tabs[5]:
                 for s in service_settings:
                     st.write(f"**{s['key']}:** `{s['value'][:100]}`")
 
-# ============ TAB 7: Embeddings ============
-with tabs[6]:
+# ============ TAB 8: Embeddings ============
+with tabs[7]:
     st.markdown("### Embeddings")
 
     with db.get_connection() as conn:
@@ -259,8 +311,8 @@ with tabs[6]:
         for model, model_embs in models.items():
             st.write(f"**Model:** {model} - {len(model_embs)} embeddings")
 
-# ============ TAB 8: Data Management ============
-with tabs[7]:
+# ============ TAB 9: Data Management ============
+with tabs[8]:
     st.markdown("### 🗑️ Data Management & Reset")
 
     st.warning("""
