@@ -298,6 +298,8 @@ with tab2:
                     logs.append(f"[INFO] Model: {config['model']}")
                     logs.append(f"[INFO] Debug mode: {'ON' if config['show_llm_response'] else 'OFF'}")
                     logs.append(f"[INFO] Mode: {'Skip already classified' if config.get('skip_classified', True) else 'Re-classify all pages'}")
+                    logs.append(f"[INFO] Skip classified: {config.get('skip_classified', True)}")
+                    logs.append(f"[INFO] Country filter: {config['countries_filter']}")
                     log_area.code('\n'.join(logs))
 
                     # Use ClassifierController
