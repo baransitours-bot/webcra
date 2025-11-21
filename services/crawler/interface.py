@@ -5,11 +5,16 @@ Provides clean APIs for interacting with the crawler.
 
 INTERIOR Interface: Python API for service-to-service communication
 EXTERIOR Interface: Used by UI, CLI, and external systems
+
+Supports two crawler engines:
+- Simple (HTTP requests) - Fast but may be blocked
+- Browser (Playwright) - Slower but bypasses bot detection
 """
 
 from typing import List, Dict, Callable, Optional
 
 from services.crawler.engine import CrawlerEngine
+from services.crawler.browser_engine import BrowserCrawlerEngine
 from services.crawler.repository import CrawlerRepository
 from shared.logger import setup_logger
 from shared.service_config import get_service_config
@@ -23,17 +28,36 @@ class CrawlerService:
     Handles setup, configuration, and provides simple methods.
     """
 
-    def __init__(self):
-        """Initialize crawler service with centralized configuration"""
+    def __init__(self, mode: Optional[str] = None):
+        """
+        Initialize crawler service with centralized configuration.
+
+        Args:
+            mode: Crawler mode - "simple" or "browser" (overrides config)
+        """
         self.logger = setup_logger('crawler_service')
 
         # Load configuration from centralized system (DB > YAML defaults)
         config_loader = get_service_config()
         self.config = config_loader.get_crawler_config()
 
+        # Override mode if specified
+        if mode:
+            self.config['mode'] = mode
+
         # Initialize layers
         self.repo = CrawlerRepository()  # FUEL TRANSPORT
-        self.engine = CrawlerEngine(self.config, self.repo)  # ENGINE
+
+        # Choose engine based on mode
+        self.mode = self.config.get('mode', 'simple')
+        if self.mode == 'browser':
+            self.logger.info("🌐 Using Browser Crawler Engine (Playwright)")
+            self.engine = None  # Will be created in context manager
+            self.engine_class = BrowserCrawlerEngine
+        else:
+            self.logger.info("⚡ Using Simple Crawler Engine (HTTP)")
+            self.engine = CrawlerEngine(self.config, self.repo)  # ENGINE
+            self.engine_class = None
 
     def crawl_country(self, country_name: str, seed_urls: List[str]) -> Dict:
         """
@@ -46,7 +70,13 @@ class CrawlerService:
         Returns:
             Crawl statistics
         """
-        return self.engine.crawl_country(country_name, seed_urls)
+        if self.mode == 'browser':
+            # Use browser engine with context manager
+            with BrowserCrawlerEngine(self.config, self.repo) as browser_engine:
+                return browser_engine.crawl_country(country_name, seed_urls)
+        else:
+            # Use simple HTTP engine
+            return self.engine.crawl_country(country_name, seed_urls)
 
     def crawl_all_countries(self) -> List[Dict]:
         """
@@ -64,8 +94,9 @@ class CrawlerService:
             )
             results.append(result)
 
-            # Reset engine for next country
-            self.engine.reset()
+            # Reset engine for next country (only for simple mode)
+            if self.mode == 'simple' and self.engine:
+                self.engine.reset()
 
         return results
 
@@ -112,10 +143,16 @@ class CrawlerController:
     Provides callback support for progress tracking.
     """
 
-    def __init__(self):
-        """Initialize controller with service"""
-        self.service = CrawlerService()
+    def __init__(self, mode: Optional[str] = None):
+        """
+        Initialize controller with service.
+
+        Args:
+            mode: Crawler mode - "simple" or "browser"
+        """
+        self.service = CrawlerService(mode=mode)
         self.logger = setup_logger('crawler_controller')
+        self.mode = self.service.mode
 
     def crawl_with_progress(
         self,
@@ -158,8 +195,9 @@ class CrawlerController:
 
                 results.append(result)
 
-                # Reset for next country
-                self.service.engine.reset()
+                # Reset for next country (only for simple mode)
+                if self.service.mode == 'simple' and self.service.engine:
+                    self.service.engine.reset()
 
             except Exception as e:
                 self.logger.error(f"Error crawling {country['name']}: {e}")

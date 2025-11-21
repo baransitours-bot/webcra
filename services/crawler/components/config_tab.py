@@ -52,6 +52,20 @@ class ConfigTab:
         max_depth_default = config_mgr.get('crawler.max_depth', 3)
         delay_default = config_mgr.get('crawler.delay', 2.0)
 
+        # Crawler engine mode selector
+        st.markdown("### 🚀 Crawler Engine")
+        crawler_mode = st.radio(
+            "Select Crawler Mode",
+            ["⚡ Simple (HTTP) - Fast but may be blocked", "🌐 Browser (Playwright) - Bypasses bot detection"],
+            help="Simple mode: Fast HTTP requests, may get 403 errors.\n"
+                 "Browser mode: Slower but works with sites that block bots (requires Playwright)."
+        )
+
+        # Extract mode value
+        crawler_mode_value = 'browser' if 'Browser' in crawler_mode else 'simple'
+
+        st.markdown("---")
+
         st.info(f"""
         **Default Settings (from Global Config):**
         - Max Pages: {max_pages_default} per country
@@ -77,12 +91,29 @@ class ConfigTab:
             'max_pages': max_pages_default,
             'max_depth': max_depth_default,
             'request_delay': delay_default,
+            'crawler_mode': crawler_mode_value,
             'mode': 'default'
         }
 
     @staticmethod
     def _render_custom_config(available_countries):
         """Render custom configuration"""
+
+        # Crawler engine mode selector
+        st.markdown("### 🚀 Crawler Engine")
+        crawler_mode = st.radio(
+            "Select Crawler Mode",
+            ["⚡ Simple (HTTP) - Fast but may be blocked", "🌐 Browser (Playwright) - Bypasses bot detection"],
+            help="Simple mode: Fast HTTP requests, may get 403 errors.\n"
+                 "Browser mode: Slower but works with sites that block bots (requires Playwright)."
+        )
+
+        # Extract mode value
+        crawler_mode_value = 'browser' if 'Browser' in crawler_mode else 'simple'
+
+        st.markdown("---")
+        st.markdown("### ⚙️ Crawl Settings")
+
         col1, col2 = st.columns(2)
 
         with col1:
@@ -125,5 +156,6 @@ class ConfigTab:
             'max_pages': max_pages,
             'max_depth': max_depth,
             'request_delay': request_delay,
+            'crawler_mode': crawler_mode_value,
             'mode': 'custom'
         }
