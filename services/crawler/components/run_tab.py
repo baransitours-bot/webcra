@@ -45,10 +45,14 @@ class RunTab:
         logger = LogViewer(max_lines=30, expanded=True)
 
         try:
-            logger.add_info("Initializing crawler controller...")
+            # Get crawler mode from config
+            crawler_mode = config.get('crawler_mode', 'simple')
 
-            # Initialize controller
-            controller = CrawlerController()
+            logger.add_info("Initializing crawler controller...")
+            logger.add_info(f"Crawler mode: {crawler_mode.upper()}")
+
+            # Initialize controller with mode
+            controller = CrawlerController(mode=crawler_mode)
             logger.add_success("Controller initialized")
 
             # Update config

@@ -1,5 +1,8 @@
 # Crawler Configuration
 
+# Crawler mode: "simple" (HTTP requests) or "browser" (Playwright automation)
+mode: "simple"
+
 crawling:
   max_depth: 3
   max_pages_per_country: 100
@@ -12,6 +15,20 @@ crawling:
 
   # User agent
   user_agent: "Mozilla/5.0 (compatible; ImmigrationBot/1.0; Research Purpose)"
+
+# Browser automation settings (used when mode="browser")
+browser:
+  # Run browser in headless mode (no visible window)
+  headless: true
+
+  # Browser type: chromium, firefox, or webkit
+  browser_type: "chromium"
+
+  # Wait for content to load (milliseconds)
+  page_load_wait: 2000
+
+  # Take screenshots on error (for debugging)
+  screenshot_on_error: false
 
 # Keywords to filter relevant pages
 keywords:
