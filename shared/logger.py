@@ -36,8 +36,23 @@ def setup_logger(name: str, log_file: str = None, level=logging.INFO):
 
     # File handler (optional) - always use UTF-8
     if log_file:
-        Path("logs").mkdir(exist_ok=True)
-        file_handler = logging.FileHandler(f"logs/{log_file}", encoding='utf-8')
+        # If log_file is already an absolute path, use it directly
+        # Otherwise, add "logs/" prefix
+        from pathlib import Path as PathLib
+        log_path = PathLib(log_file)
+
+        if log_path.is_absolute():
+            # Full path provided - use as-is
+            log_file_path = log_path
+        else:
+            # Relative path - add logs/ prefix
+            Path("logs").mkdir(exist_ok=True)
+            log_file_path = Path("logs") / log_file
+
+        # Ensure parent directory exists
+        log_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        file_handler = logging.FileHandler(str(log_file_path), encoding='utf-8')
         file_handler.setLevel(level)
         file_handler.setFormatter(console_format)
         logger.addHandler(file_handler)
