@@ -177,7 +177,7 @@ with tab1:
                     st.error(f"❌ Error: {str(e)}")
 
     with col2:
-        if st.button("🗑️ Clear Conversation"):
+        if st.button("🗑️ Clear Conversation", key="clear_conv_main"):
             st.session_state['chat_history'] = []
             controller.reset_conversation()
             st.rerun()
@@ -359,7 +359,7 @@ with tab3:
                 st.error(f"❌ Error reloading data: {str(e)}")
 
     with col2:
-        if st.button("🗑️ Clear Conversation"):
+        if st.button("🗑️ Clear Conversation", key="clear_conv_settings"):
             controller.reset_conversation()
             st.session_state['chat_history'] = []
             st.success("✅ Conversation cleared")
