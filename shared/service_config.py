@@ -176,7 +176,13 @@ class ServiceConfigLoader:
                 'top_k': 5,
                 'similarity_threshold': 0.7
             }),
-            'response_style': service_config.get('response_style', 'professional')
+            'context': service_config.get('context', {
+                'max_visas': 5,
+                'max_general_content': 5,
+                'max_history': 10
+            }),
+            'response_style': service_config.get('response_style', 'professional'),
+            'use_enhanced_retrieval': service_config.get('use_enhanced_retrieval', True)
         }
 
         return config

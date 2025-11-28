@@ -35,9 +35,10 @@ class EnhancedRetriever:
         self.semantic_retriever = self._init_semantic_search()
         self.reranker = self._init_reranker()
 
-        # Index ALL content if semantic search is available
+        # Load existing embeddings from cache (fast!)
+        # Only index if caches don't exist (slow, only first time)
         if self.semantic_retriever:
-            self._index_all_content()
+            self._load_or_index_content()
 
     def _init_semantic_search(self):
         """Try to initialize semantic search"""
@@ -62,6 +63,53 @@ class EnhancedRetriever:
             self.logger.info(f"Reranking not available: {str(e)[:50]}")
             return None
 
+    def _load_or_index_content(self):
+        """
+        Load embeddings from cache if exist, otherwise index content.
+
+        This is MUCH faster than always indexing:
+        - Loading from cache: <1 second
+        - Indexing from scratch: 1-2 minutes
+
+        Only indexes if:
+        1. No cache files exist, OR
+        2. Cache files exist but are empty/corrupted
+        """
+        try:
+            # Try to load from existing caches (FAST!)
+            visa_cache_exists = self.semantic_retriever.visa_cache.exists()
+            general_cache_exists = self.semantic_retriever.general_cache.exists()
+
+            # Load visas from cache if possible
+            if visa_cache_exists:
+                try:
+                    import pickle
+                    with open(self.semantic_retriever.visa_cache, 'rb') as f:
+                        self.semantic_retriever.visa_embeddings = pickle.load(f)
+                    self.logger.info(f"✅ Loaded {len(self.semantic_retriever.visa_embeddings)} visa embeddings from cache")
+                except Exception as e:
+                    self.logger.warning(f"Failed to load visa cache: {e}. Will re-index.")
+                    visa_cache_exists = False
+
+            # Load general content from cache if possible
+            if general_cache_exists:
+                try:
+                    import pickle
+                    with open(self.semantic_retriever.general_cache, 'rb') as f:
+                        self.semantic_retriever.general_embeddings = pickle.load(f)
+                    self.logger.info(f"✅ Loaded {len(self.semantic_retriever.general_embeddings)} general embeddings from cache")
+                except Exception as e:
+                    self.logger.warning(f"Failed to load general cache: {e}. Will re-index.")
+                    general_cache_exists = False
+
+            # Only index if caches don't exist or failed to load
+            if not visa_cache_exists or not general_cache_exists:
+                self.logger.info("⚠️ Embeddings not cached. Indexing content (this will take 1-2 minutes)...")
+                self._index_all_content()
+
+        except Exception as e:
+            self.logger.error(f"Failed to load or index content: {e}")
+
     def _index_all_content(self):
         """Index both visas AND general content for semantic search"""
         try:
@@ -75,8 +123,10 @@ class EnhancedRetriever:
 
             # Index both types
             if visa_dicts or content_dicts:
-                self.semantic_retriever.index_all(visa_dicts, content_dicts)
+                self.semantic_retriever.index_all(visa_dicts, content_dicts, force_reindex=False)
                 self.logger.info(f"✅ Indexed {len(visa_dicts)} visas + {len(content_dicts)} general content items")
+            else:
+                self.logger.warning("⚠️ No content to index. Run Crawler + Classifier first.")
         except Exception as e:
             self.logger.error(f"Failed to index content: {e}")
 
