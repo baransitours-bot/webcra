@@ -14,7 +14,7 @@ Falls back gracefully if models not installed.
 from typing import List, Dict, Tuple
 import re
 from shared.database import Database
-from shared.models import Visa
+from shared.models import Visa, GeneralContent
 from shared.logger import setup_logger
 
 
@@ -122,6 +122,88 @@ class EnhancedRetriever:
 
         self.logger.info(f"Returning {len(results)} visas")
         return results
+
+    def retrieve_relevant_general_content(self, query: str) -> List[Dict]:
+        """
+        Retrieve general content relevant to the query.
+
+        Uses keyword search (semantic search not needed for general content).
+
+        Args:
+            query: User's question or search terms
+
+        Returns:
+            List of general content dictionaries
+        """
+        # Load all general content
+        all_content = self.db.get_general_content()
+
+        if not all_content:
+            self.logger.warning("No general content found in database")
+            return []
+
+        # Convert to dicts for processing
+        content_dicts = [c.to_dict() for c in all_content]
+
+        # Apply keyword search
+        query_lower = query.lower()
+        query_words = set(re.findall(r'\w+', query_lower))
+
+        scored = []
+        for content in content_dicts:
+            score = 0.0
+
+            # Country match
+            if content['country'].lower() in query_lower:
+                score += 3.0
+
+            # Content type match
+            if content.get('content_type', '').lower() in query_lower:
+                score += 2.0
+
+            # Title match
+            title_words = set(re.findall(r'\w+', content['title'].lower()))
+            score += len(query_words & title_words) * 0.8
+
+            # Key points match
+            key_points_text = ' '.join(content.get('key_points', [])).lower()
+            for word in query_words:
+                if len(word) > 3 and word in key_points_text:
+                    score += 0.5
+
+            # Topics match
+            topics = content.get('metadata', {}).get('topics', [])
+            for topic in topics:
+                if topic.lower() in query_lower:
+                    score += 1.0
+
+            if score > 0:
+                scored.append((score, content))
+
+        # Sort by score
+        scored.sort(reverse=True, key=lambda x: x[0])
+
+        # Limit results
+        max_content = self.config['context'].get('max_general_content', 5)
+        results = [content for _, content in scored[:max_content]]
+
+        self.logger.info(f"Returning {len(results)} general content items")
+        return results
+
+    def retrieve_all_context(self, query: str, user_profile: Dict = None) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Retrieve both visas and general content for comprehensive answers.
+
+        Args:
+            query: User's question
+            user_profile: Optional user profile
+
+        Returns:
+            Tuple of (visa_list, general_content_list)
+        """
+        visas = self.retrieve_relevant_visas(query, user_profile)
+        general_content = self.retrieve_relevant_general_content(query)
+        return visas, general_content
 
     def _extract_filters(self, query: str) -> Dict:
         """Extract country and category from query"""
@@ -285,16 +367,43 @@ class EnhancedRetriever:
 
     # ============ FORMATTING ============
 
-    def format_context_for_llm(self, visas: List[Dict]) -> str:
-        """Format visa information for LLM context"""
-        if not visas:
-            return "No relevant visa information found in the database."
+    def format_context_for_llm(self, visas: List[Dict], general_content: List[Dict] = None) -> str:
+        """
+        Format visa and general content information for LLM context.
 
-        parts = []
-        for i, visa in enumerate(visas, 1):
-            parts.append(self._format_visa(i, visa))
+        Creates a structured text representation that the LLM can use to answer questions.
 
-        return "\n---\n".join(parts)
+        Args:
+            visas: List of visa dictionaries
+            general_content: Optional list of general content dictionaries
+
+        Returns:
+            Formatted string for LLM context
+        """
+        context_parts = []
+
+        # Format visas
+        if visas:
+            visa_parts = []
+            for i, visa in enumerate(visas, 1):
+                context = self._format_visa(i, visa)
+                visa_parts.append(context)
+
+            context_parts.append("=== VISA PROGRAMS ===\n" + "\n---\n".join(visa_parts))
+
+        # Format general content
+        if general_content:
+            general_parts = []
+            for i, content in enumerate(general_content, 1):
+                context = self._format_general_content(i, content)
+                general_parts.append(context)
+
+            context_parts.append("=== GENERAL INFORMATION ===\n" + "\n---\n".join(general_parts))
+
+        if not context_parts:
+            return "No relevant information found in the database."
+
+        return "\n\n".join(context_parts)
 
     def _format_visa(self, index: int, visa: Dict) -> str:
         """Format single visa for display"""
@@ -341,5 +450,45 @@ class EnhancedRetriever:
         # Source
         if visa.get('source_urls'):
             lines.append(f"\nSource: {visa['source_urls'][0]}")
+
+        return "\n".join(lines)
+
+    def _format_general_content(self, index: int, content: Dict) -> str:
+        """Format single general content item for display"""
+        lines = [
+            f"\nGeneral Content {index}: {content['title']}",
+            f"Type: {content.get('content_type', 'N/A')}",
+            f"Country: {content['country']}",
+            f"Audience: {content.get('metadata', {}).get('audience', 'general')}",
+            "",
+            "Summary:",
+            content.get('summary', 'No summary available'),
+            ""
+        ]
+
+        # Key points
+        key_points = content.get('key_points', [])
+        if key_points:
+            lines.append("Key Points:")
+            for point in key_points[:5]:  # Limit to 5 key points
+                lines.append(f"- {point}")
+            lines.append("")
+
+        # Application links
+        app_links = content.get('application_links', [])
+        if app_links:
+            lines.append("Application Links:")
+            for link in app_links[:3]:  # Limit to 3 links
+                label = link.get('label', 'Link')
+                url = link.get('url', '')
+                if url:
+                    lines.append(f"- {label}: {url}")
+                else:
+                    lines.append(f"- {label}")
+            lines.append("")
+
+        # Source
+        if content.get('source_url'):
+            lines.append(f"Source: {content['source_url']}")
 
         return "\n".join(lines)
