@@ -35,9 +35,9 @@ class EnhancedRetriever:
         self.semantic_retriever = self._init_semantic_search()
         self.reranker = self._init_reranker()
 
-        # Index visas if semantic search is available
+        # Index ALL content if semantic search is available
         if self.semantic_retriever:
-            self._index_visas()
+            self._index_all_content()
 
     def _init_semantic_search(self):
         """Try to initialize semantic search"""
@@ -62,16 +62,23 @@ class EnhancedRetriever:
             self.logger.info(f"Reranking not available: {str(e)[:50]}")
             return None
 
-    def _index_visas(self):
-        """Index all visas for semantic search"""
+    def _index_all_content(self):
+        """Index both visas AND general content for semantic search"""
         try:
+            # Get visas
             visas = self.db.get_visas()
-            if visas:
-                # Convert to dicts for indexing
-                visa_dicts = [v.to_dict() for v in visas]
-                self.semantic_retriever.index_visas(visa_dicts)
+            visa_dicts = [v.to_dict() for v in visas] if visas else []
+
+            # Get general content
+            general_content = self.db.get_general_content()
+            content_dicts = [c.to_dict() for c in general_content] if general_content else []
+
+            # Index both types
+            if visa_dicts or content_dicts:
+                self.semantic_retriever.index_all(visa_dicts, content_dicts)
+                self.logger.info(f"✅ Indexed {len(visa_dicts)} visas + {len(content_dicts)} general content items")
         except Exception as e:
-            self.logger.error(f"Failed to index visas: {e}")
+            self.logger.error(f"Failed to index content: {e}")
 
     # ============ SEARCH METHODS ============
 
@@ -127,7 +134,7 @@ class EnhancedRetriever:
         """
         Retrieve general content relevant to the query.
 
-        Uses keyword search (semantic search not needed for general content).
+        Uses SEMANTIC search if available, falls back to keyword search.
 
         Args:
             query: User's question or search terms
@@ -145,7 +152,20 @@ class EnhancedRetriever:
         # Convert to dicts for processing
         content_dicts = [c.to_dict() for c in all_content]
 
-        # Apply keyword search
+        max_content = self.config['context'].get('max_general_content', 5)
+
+        # Try semantic search first (if available)
+        if self.semantic_retriever:
+            try:
+                semantic_results = self.semantic_retriever.search_general_content(query, top_k=max_content)
+                if semantic_results:
+                    results = [content for _, content in semantic_results]
+                    self.logger.info(f"🔍 Semantic search: {len(results)} general content items")
+                    return results
+            except Exception as e:
+                self.logger.warning(f"Semantic search failed, falling back to keyword: {e}")
+
+        # Fallback to keyword search
         query_lower = query.lower()
         query_words = set(re.findall(r'\w+', query_lower))
 
@@ -184,10 +204,9 @@ class EnhancedRetriever:
         scored.sort(reverse=True, key=lambda x: x[0])
 
         # Limit results
-        max_content = self.config['context'].get('max_general_content', 5)
         results = [content for _, content in scored[:max_content]]
 
-        self.logger.info(f"Returning {len(results)} general content items")
+        self.logger.info(f"📝 Keyword search: {len(results)} general content items")
         return results
 
     def retrieve_all_context(self, query: str, user_profile: Dict = None) -> Tuple[List[Dict], List[Dict]]:
